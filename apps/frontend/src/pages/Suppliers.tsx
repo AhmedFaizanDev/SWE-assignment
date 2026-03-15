@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit2, Trash2, Star, Mail, Phone, MapPin } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Plus, Edit2, Trash2, Star, Mail, Phone, MapPin, Truck } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 const emptyForm = { name: '', contactPerson: '', email: '', phone: '', address: '', itemsSupplied: [] as string[], lastPurchaseDate: '', totalOrders: 0, rating: 4 };
 
 export default function Suppliers() {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useInventory();
+  const { suppliers, inventory, addSupplier, updateSupplier, deleteSupplier } = useInventory();
   const [modalOpen, setModalOpen] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
   const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
@@ -49,8 +49,30 @@ export default function Suppliers() {
     if (deleteId) { deleteSupplier(deleteId); toast.success('Supplier deleted'); setDeleteId(null); }
   };
 
+  const getSupplierItems = (supplierName: string) =>
+    inventory.filter(i => i.supplier === supplierName);
+
+  // Empty state
+  if (suppliers.length === 0) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">Manage suppliers and their contact details.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
+            <Truck className="h-8 w-8 text-muted-foreground/50" />
+          </div>
+          <h3 className="text-lg font-semibold mb-1">No suppliers yet</h3>
+          <p className="text-sm text-muted-foreground mb-4">Add your first supplier to link them to inventory items</p>
+          <Button onClick={openAdd} className="gap-1.5"><Plus className="h-4 w-4" /> Add Supplier</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Manage suppliers and their contact details.</p>
+
       <div className="flex justify-between items-center">
         <p className="text-sm text-muted-foreground">{suppliers.length} suppliers</p>
         <Button onClick={openAdd} size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> Add Supplier</Button>
@@ -94,9 +116,16 @@ export default function Suppliers() {
       {/* Detail Sheet */}
       <Sheet open={!!viewSupplier} onOpenChange={() => setViewSupplier(null)}>
         <SheetContent>
-          <SheetHeader><SheetTitle>{viewSupplier?.name}</SheetTitle></SheetHeader>
+          <SheetHeader>
+            <div className="flex items-center justify-between">
+              <SheetTitle>{viewSupplier?.name}</SheetTitle>
+            </div>
+          </SheetHeader>
           {viewSupplier && (
             <div className="mt-6 space-y-4">
+              <Button variant="outline" size="sm" className="w-full" onClick={() => { setViewSupplier(null); openEdit(viewSupplier); }}>
+                <Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit supplier
+              </Button>
               <div className="flex items-center gap-2 text-sm"><Mail className="h-4 w-4 text-muted-foreground" />{viewSupplier.email}</div>
               <div className="flex items-center gap-2 text-sm"><Phone className="h-4 w-4 text-muted-foreground" />{viewSupplier.phone}</div>
               <div className="flex items-center gap-2 text-sm"><MapPin className="h-4 w-4 text-muted-foreground" />{viewSupplier.address}</div>
@@ -106,6 +135,20 @@ export default function Suppliers() {
                   {viewSupplier.itemsSupplied.map(i => <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>)}
                 </div>
               </div>
+              {/* Items in inventory */}
+              {getSupplierItems(viewSupplier.name).length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Items in Inventory</p>
+                  <div className="space-y-1">
+                    {getSupplierItems(viewSupplier.name).map(i => (
+                      <div key={i.id} className="flex justify-between text-xs py-1">
+                        <span>{i.name}</span>
+                        <span className="font-mono text-muted-foreground">{i.quantity} units</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div><p className="text-xs text-muted-foreground">Total Orders</p><p className="font-semibold">{viewSupplier.totalOrders}</p></div>
                 <div><p className="text-xs text-muted-foreground">Last Purchase</p><p className="font-semibold">{viewSupplier.lastPurchaseDate}</p></div>
@@ -121,14 +164,18 @@ export default function Suppliers() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>{editSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2"><Label>Company Name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div className="grid gap-2"><Label>Company Name <span className="text-destructive">*</span></Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2"><Label>Contact Person</Label><Input value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} /></div>
               <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
             </div>
-            <div className="grid gap-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
+            <div className="grid gap-2"><Label>Email <span className="text-destructive">*</span></Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
             <div className="grid gap-2"><Label>Address</Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
-            <div className="grid gap-2"><Label>Items Supplied (comma-separated)</Label><Input value={itemsText} onChange={e => setItemsText(e.target.value)} /></div>
+            <div className="grid gap-2">
+              <Label>Items Supplied</Label>
+              <Input value={itemsText} onChange={e => setItemsText(e.target.value)} placeholder="Comma-separated list of item names or categories" />
+              <p className="text-[10px] text-muted-foreground">e.g. Arduino, ESP32, Breadboards</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>

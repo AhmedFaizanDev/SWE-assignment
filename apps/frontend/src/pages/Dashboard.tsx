@@ -1,11 +1,14 @@
 import { motion } from 'framer-motion';
-import { Package, AlertTriangle, BookOpen, FileText, ArrowUpRight, ArrowDownRight, RotateCcw, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Package, AlertTriangle, BookOpen, FileText, ArrowUpRight, ArrowDownRight, RotateCcw, CheckCircle, XCircle, Clock, Inbox } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useInventory } from '@/contexts/InventoryContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { categoryColors } from '@/data/mockData';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' as const } } };
@@ -36,6 +39,8 @@ const activityIcons: Record<string, React.ReactNode> = {
 
 export default function Dashboard() {
   const { inventory, requests, borrowedItems, activities } = useInventory();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const totalItems = inventory.reduce((sum, i) => sum + i.quantity, 0);
   const lowStockItems = inventory.filter(i => i.quantity <= i.minThreshold);
@@ -48,19 +53,30 @@ export default function Dashboard() {
     fill: categoryColors[cat],
   }));
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
   const summaryCards = [
-    { title: 'Total Items', value: totalItems, icon: Package, color: 'text-primary', bg: 'bg-primary/10' },
-    { title: 'Low Stock', value: lowStockItems.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10' },
-    { title: 'Borrowed', value: activeBorrowed.length, icon: BookOpen, color: 'text-info', bg: 'bg-info/10' },
-    { title: 'Pending Requests', value: pendingRequests.length, icon: FileText, color: 'text-destructive', bg: 'bg-destructive/10' },
+    { title: 'Total Items', value: totalItems, icon: Package, color: 'text-primary', bg: 'bg-primary/10', onClick: () => navigate('/inventory') },
+    { title: 'Low Stock', value: lowStockItems.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', onClick: () => navigate('/inventory?q=low') },
+    { title: 'Borrowed', value: activeBorrowed.length, icon: BookOpen, color: 'text-info', bg: 'bg-info/10', onClick: () => navigate('/borrowed') },
+    { title: 'Pending Requests', value: pendingRequests.length, icon: FileText, color: 'text-destructive', bg: 'bg-destructive/10', onClick: () => navigate('/requests') },
   ];
 
   return (
     <div className="space-y-6">
+      {/* Welcome */}
+      <div>
+        <p className="text-sm text-muted-foreground">{greeting}, <span className="font-medium text-foreground">{user?.name || 'there'}</span></p>
+      </div>
+
       <motion.div variants={container} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {summaryCards.map((card) => (
           <motion.div key={card.title} variants={item}>
-            <Card className="hover:shadow-md transition-shadow duration-300 border-border/50">
+            <Card
+              className="hover:shadow-md transition-all duration-300 border-border/50 cursor-pointer hover:border-primary/20"
+              onClick={card.onClick}
+            >
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
@@ -73,6 +89,7 @@ export default function Dashboard() {
                     <card.icon className={`h-5 w-5 ${card.color}`} />
                   </div>
                 </div>
+                <p className="text-[10px] text-primary mt-2 font-medium">View all →</p>
               </CardContent>
             </Card>
           </motion.div>
@@ -85,19 +102,27 @@ export default function Dashboard() {
           <Card className="border-border/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Inventory Distribution</CardTitle>
+              <p className="text-xs text-muted-foreground">Total quantity per category</p>
             </CardHeader>
             <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryData} barSize={40}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="category" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12 }} />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {inventory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-center">
+                  <Package className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                  <p className="text-sm text-muted-foreground">Add inventory items to see distribution</p>
+                </div>
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={categoryData} barSize={40}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="category" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                      <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 12 }} />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="hsl(var(--primary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -105,40 +130,54 @@ export default function Dashboard() {
         {/* Recent Activity */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.5 }}>
           <Card className="border-border/50 h-full">
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex-row items-center justify-between">
               <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => navigate('/activity')}>View all</Button>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
-                {activities.slice(0, 8).map((a, idx) => (
-                  <motion.div key={a.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 + idx * 0.05 }}
-                    className="flex gap-3 items-start">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                      {activityIcons[a.type]}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-foreground leading-relaxed">{a.description}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(a.timestamp).toLocaleString()}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+              {activities.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Inbox className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                  <p className="text-xs text-muted-foreground">No recent activity</p>
+                  <p className="text-[10px] text-muted-foreground/70 mt-1">Actions will appear here as you use the system.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                  {activities.slice(0, 8).map((a, idx) => (
+                    <motion.div key={a.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 + idx * 0.05 }}
+                      className="flex gap-3 items-start">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                        {activityIcons[a.type]}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-foreground leading-relaxed">{a.description}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(a.timestamp).toLocaleString()}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
       {/* Low Stock Alert */}
-      {lowStockItems.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
-          <Card className="border-border/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Low Stock Alerts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              Low Stock Alerts
+            </CardTitle>
+            {lowStockItems.length > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => navigate('/inventory?q=low')}>View all</Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            {lowStockItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">All items are above threshold ✓</p>
+            ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -152,7 +191,8 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {lowStockItems.map(i => (
-                      <tr key={i.id} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
+                      <tr key={i.id} className="border-b border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => navigate('/inventory')}>
                         <td className="py-2 px-3 font-medium">{i.name}</td>
                         <td className="py-2 px-3 text-muted-foreground">{i.category}</td>
                         <td className="py-2 px-3 text-center font-mono">{i.quantity}</td>
@@ -167,10 +207,10 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }
