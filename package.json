@@ -4,15 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run dev --workspace=apps/frontend",
-    "build": "npm run build --workspace=apps/frontend",
-    "preview": "npm run preview --workspace=apps/frontend",
-    "lint": "npm run lint --workspace=apps/frontend",
-    "test": "npm run test --workspace=apps/frontend"
+    "dev": "cd apps/frontend && npx vite",
+    "build": "cd apps/frontend && npx vite build",
+    "preview": "cd apps/frontend && npx vite preview",
+    "lint": "cd apps/frontend && npx eslint .",
+    "test": "cd apps/frontend && npx vitest run"
   },
   "workspaces": [
-    "apps/frontend",
-    "apps/api"
+    "apps/frontend"
   ],
   "engines": {
     "node": ">=18"
