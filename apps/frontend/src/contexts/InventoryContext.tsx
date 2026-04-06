@@ -1,8 +1,28 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  InventoryItem, ItemRequest, BorrowedItem, Supplier, ActivityEntry,
-  initialInventory, initialRequests, initialBorrowedItems, initialSuppliers, initialActivities,
-} from '@/data/mockData';
+  InventoryItem,
+  ItemRequest,
+  BorrowedItem,
+  Supplier,
+  ActivityEntry,
+} from '@/data/types';
+import {
+  inventoryApi,
+  suppliersApi,
+  requestsApi,
+  borrowedApi,
+  activityApi,
+} from '@/lib/api';
+import { toast } from 'sonner';
+
+const QUERY_KEYS = {
+  inventory: ['inventory'] as const,
+  suppliers: ['suppliers'] as const,
+  requests: (status?: string) => ['requests', status] as const,
+  borrowed: (status?: string) => ['borrowed', status] as const,
+  activity: (limit?: number) => ['activity', limit] as const,
+};
 
 interface InventoryContextType {
   inventory: InventoryItem[];
@@ -10,21 +30,27 @@ interface InventoryContextType {
   borrowedItems: BorrowedItem[];
   suppliers: Supplier[];
   activities: ActivityEntry[];
+  isLoading: boolean;
+  isError: boolean;
+  inventoryError: boolean;
+  suppliersError: boolean;
+  requestsError: boolean;
+  borrowedError: boolean;
+  activityError: boolean;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
   updateInventoryItem: (id: string, item: Partial<InventoryItem>) => void;
   deleteInventoryItem: (id: string) => void;
   addRequest: (req: Omit<ItemRequest, 'id'>) => void;
   updateRequestStatus: (id: string, status: ItemRequest['status']) => void;
-  addBorrowedItem: (item: Omit<BorrowedItem, 'id'>) => void;
   returnBorrowedItem: (id: string) => void;
   extendReturnDate: (id: string, newDate: string) => void;
   addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
   deleteSupplier: (id: string) => void;
-  addActivity: (entry: Omit<ActivityEntry, 'id'>) => void;
+  refetch: () => void;
 }
 
-const InventoryContext = createContext<InventoryContextType | null>(null);
+export const InventoryContext = createContext<InventoryContextType | null>(null);
 
 export const useInventory = () => {
   const ctx = useContext(InventoryContext);
@@ -32,109 +58,239 @@ export const useInventory = () => {
   return ctx;
 };
 
-let nextId = 100;
-const genId = (prefix: string) => `${prefix}-${String(++nextId).padStart(3, '0')}`;
-
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
-  const [requests, setRequests] = useState<ItemRequest[]>(initialRequests);
-  const [borrowedItems, setBorrowedItems] = useState<BorrowedItem[]>(initialBorrowedItems);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
-  const [activities, setActivities] = useState<ActivityEntry[]>(initialActivities);
+  const queryClient = useQueryClient();
 
-  const addActivity = useCallback((entry: Omit<ActivityEntry, 'id'>) => {
-    setActivities(prev => [{ ...entry, id: genId('ACT') }, ...prev]);
-  }, []);
+  const { data: inventory = [], isLoading: invLoading, isError: invError } = useQuery({
+    queryKey: QUERY_KEYS.inventory,
+    queryFn: () => inventoryApi.list(),
+  });
 
-  const addInventoryItem = useCallback((item: Omit<InventoryItem, 'id'>) => {
-    const newItem = { ...item, id: genId('INV') };
-    setInventory(prev => [...prev, newItem]);
-    addActivity({ type: 'restocked', description: `${item.name} added to inventory (${item.quantity} units)`, timestamp: new Date().toISOString(), user: 'Admin' });
-  }, [addActivity]);
+  const { data: suppliers = [], isLoading: supLoading, isError: supError } = useQuery({
+    queryKey: QUERY_KEYS.suppliers,
+    queryFn: () => suppliersApi.list(),
+  });
 
-  const updateInventoryItem = useCallback((id: string, updates: Partial<InventoryItem>) => {
-    setInventory(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
-  }, []);
+  const { data: requests = [], isLoading: reqLoading, isError: reqError } = useQuery({
+    queryKey: QUERY_KEYS.requests(),
+    queryFn: () => requestsApi.list(),
+  });
 
-  const deleteInventoryItem = useCallback((id: string) => {
-    setInventory(prev => prev.filter(i => i.id !== id));
-  }, []);
+  const { data: borrowedItems = [], isLoading: borLoading, isError: borError } = useQuery({
+    queryKey: QUERY_KEYS.borrowed(),
+    queryFn: () => borrowedApi.list(),
+  });
 
-  const addRequest = useCallback((req: Omit<ItemRequest, 'id'>) => {
-    const newReq = { ...req, id: genId('REQ') };
-    setRequests(prev => [...prev, newReq]);
-    addActivity({ type: 'requested', description: `${req.itemName} (x${req.requestedQty}) requested by ${req.requestedBy}`, timestamp: new Date().toISOString(), user: req.requestedBy });
-  }, [addActivity]);
+  const { data: activities = [], isLoading: actLoading, isError: actError } = useQuery({
+    queryKey: QUERY_KEYS.activity(),
+    queryFn: () => activityApi.list(),
+  });
 
-  const updateRequestStatus = useCallback((id: string, status: ItemRequest['status']) => {
-    setRequests(prev => {
-      const req = prev.find(r => r.id === id);
-      if (!req) return prev;
+  const isLoading = invLoading || supLoading || reqLoading || borLoading || actLoading;
+  const inventoryError = !!invError;
+  const suppliersError = !!supError;
+  const requestsError = !!reqError;
+  const borrowedError = !!borError;
+  const activityError = !!actError;
+  const isError = inventoryError || suppliersError || requestsError || borrowedError || activityError;
 
-      if (status === 'Issued') {
-        // Deduct from inventory
-        setInventory(inv => inv.map(i => i.id === req.itemId ? { ...i, quantity: Math.max(0, i.quantity - req.requestedQty) } : i));
-        // Add to borrowed
-        const borrowed: BorrowedItem = {
-          id: genId('BRW'),
-          itemId: req.itemId,
-          equipmentName: req.itemName,
-          borrowedBy: req.requestedBy,
-          borrowDate: new Date().toISOString().split('T')[0],
-          expectedReturnDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-          status: 'Active',
-        };
-        setBorrowedItems(b => [...b, borrowed]);
-        addActivity({ type: 'issued', description: `${req.itemName} (x${req.requestedQty}) issued to ${req.requestedBy}`, timestamp: new Date().toISOString(), user: 'Admin' });
-      } else if (status === 'Approved') {
-        addActivity({ type: 'approved', description: `${req.itemName} request approved for ${req.requestedBy}`, timestamp: new Date().toISOString(), user: 'Admin' });
-      } else if (status === 'Rejected') {
-        addActivity({ type: 'rejected', description: `${req.itemName} request rejected for ${req.requestedBy}`, timestamp: new Date().toISOString(), user: 'Admin' });
-      }
+  const invalidateAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.suppliers });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.requests() });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.borrowed() });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.activity() });
+  }, [queryClient]);
 
-      return prev.map(r => r.id === id ? { ...r, status } : r);
-    });
-  }, [addActivity]);
+  const addInventoryMutation = useMutation({
+    mutationFn: inventoryApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.activity() });
+      toast.success('Item added');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to add item'),
+  });
 
-  const addBorrowedItem = useCallback((item: Omit<BorrowedItem, 'id'>) => {
-    setBorrowedItems(prev => [...prev, { ...item, id: genId('BRW') }]);
-  }, []);
+  const updateInventoryMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<InventoryItem> }) =>
+      inventoryApi.update(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+      toast.success('Item updated');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to update item'),
+  });
 
-  const returnBorrowedItem = useCallback((id: string) => {
-    setBorrowedItems(prev => {
-      const item = prev.find(b => b.id === id);
-      if (item) {
-        setInventory(inv => inv.map(i => i.id === item.itemId ? { ...i, quantity: i.quantity + 1 } : i));
-        addActivity({ type: 'returned', description: `${item.equipmentName} returned by ${item.borrowedBy}`, timestamp: new Date().toISOString(), user: item.borrowedBy });
-      }
-      return prev.map(b => b.id === id ? { ...b, status: 'Returned' as const, actualReturnDate: new Date().toISOString().split('T')[0] } : b);
-    });
-  }, [addActivity]);
+  const deleteInventoryMutation = useMutation({
+    mutationFn: inventoryApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.requests() });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.borrowed() });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.activity() });
+      toast.success('Item deleted');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to delete item'),
+  });
 
-  const extendReturnDate = useCallback((id: string, newDate: string) => {
-    setBorrowedItems(prev => prev.map(b => b.id === id ? { ...b, expectedReturnDate: newDate } : b));
-  }, []);
+  const addRequestMutation = useMutation({
+    mutationFn: requestsApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.requests() });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.activity() });
+      toast.success('Request submitted');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to submit request'),
+  });
 
-  const addSupplier = useCallback((supplier: Omit<Supplier, 'id'>) => {
-    setSuppliers(prev => [...prev, { ...supplier, id: genId('SUP') }]);
-  }, []);
+  const updateRequestStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: ItemRequest['status'] }) =>
+      requestsApi.updateStatus(id, status),
+    onSuccess: () => {
+      invalidateAll();
+      toast.success('Request updated');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to update request'),
+  });
 
-  const updateSupplier = useCallback((id: string, updates: Partial<Supplier>) => {
-    setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-  }, []);
+  const returnBorrowedMutation = useMutation({
+    mutationFn: borrowedApi.return,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.borrowed() });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.activity() });
+      toast.success('Equipment marked as returned');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to return item'),
+  });
 
-  const deleteSupplier = useCallback((id: string) => {
-    setSuppliers(prev => prev.filter(s => s.id !== id));
-  }, []);
+  const extendReturnDateMutation = useMutation({
+    mutationFn: ({ id, expectedReturnDate }: { id: string; expectedReturnDate: string }) =>
+      borrowedApi.extendDate(id, expectedReturnDate),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.borrowed() });
+      toast.success('Return date extended');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to extend date'),
+  });
+
+  const addSupplierMutation = useMutation({
+    mutationFn: suppliersApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.suppliers });
+      toast.success('Supplier added');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to add supplier'),
+  });
+
+  const updateSupplierMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<Supplier> }) =>
+      suppliersApi.update(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.suppliers });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+      toast.success('Supplier updated');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to update supplier'),
+  });
+
+  const deleteSupplierMutation = useMutation({
+    mutationFn: suppliersApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.suppliers });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inventory });
+      toast.success('Supplier deleted');
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to delete supplier'),
+  });
+
+  const addInventoryItem = useCallback(
+    (item: Omit<InventoryItem, 'id'>) => addInventoryMutation.mutate(item),
+    [addInventoryMutation]
+  );
+
+  const updateInventoryItem = useCallback(
+    (id: string, item: Partial<InventoryItem>) =>
+      updateInventoryMutation.mutate({ id, body: item }),
+    [updateInventoryMutation]
+  );
+
+  const deleteInventoryItem = useCallback(
+    (id: string) => deleteInventoryMutation.mutate(id),
+    [deleteInventoryMutation]
+  );
+
+  const addRequest = useCallback(
+    (req: Omit<ItemRequest, 'id'>) => addRequestMutation.mutate(req),
+    [addRequestMutation]
+  );
+
+  const updateRequestStatus = useCallback(
+    (id: string, status: ItemRequest['status']) =>
+      updateRequestStatusMutation.mutate({ id, status }),
+    [updateRequestStatusMutation]
+  );
+
+  const returnBorrowedItem = useCallback(
+    (id: string) => returnBorrowedMutation.mutate(id),
+    [returnBorrowedMutation]
+  );
+
+  const extendReturnDate = useCallback(
+    (id: string, newDate: string) =>
+      extendReturnDateMutation.mutate({ id, expectedReturnDate: newDate }),
+    [extendReturnDateMutation]
+  );
+
+  const addSupplier = useCallback(
+    (supplier: Omit<Supplier, 'id'>) => addSupplierMutation.mutate(supplier),
+    [addSupplierMutation]
+  );
+
+  const updateSupplier = useCallback(
+    (id: string, supplier: Partial<Supplier>) =>
+      updateSupplierMutation.mutate({ id, body: supplier }),
+    [updateSupplierMutation]
+  );
+
+  const deleteSupplier = useCallback(
+    (id: string) => deleteSupplierMutation.mutate(id),
+    [deleteSupplierMutation]
+  );
+
+  const refetch = useCallback(() => {
+    invalidateAll();
+  }, [invalidateAll]);
 
   return (
-    <InventoryContext.Provider value={{
-      inventory, requests, borrowedItems, suppliers, activities,
-      addInventoryItem, updateInventoryItem, deleteInventoryItem,
-      addRequest, updateRequestStatus,
-      addBorrowedItem, returnBorrowedItem, extendReturnDate,
-      addSupplier, updateSupplier, deleteSupplier, addActivity,
-    }}>
+    <InventoryContext.Provider
+      value={{
+        inventory,
+        requests,
+        borrowedItems,
+        suppliers,
+        activities,
+        isLoading,
+        isError,
+        inventoryError,
+        suppliersError,
+        requestsError,
+        borrowedError,
+        activityError,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItem,
+        addRequest,
+        updateRequestStatus,
+        returnBorrowedItem,
+        extendReturnDate,
+        addSupplier,
+        updateSupplier,
+        deleteSupplier,
+        refetch,
+      }}
+    >
       {children}
     </InventoryContext.Provider>
   );

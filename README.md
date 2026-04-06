@@ -9,3 +9,9 @@ git clone <YOUR_GIT_URL> && cd <YOUR_PROJECT_NAME>
 npm install
 npm run dev
 ```
+
+## Production Deployment
+
+Production deployment with AWS + Coolify is documented in `DEPLOY_AWS_COOLIFY.md`.
+
+For production containers, use `docker-compose.prod.yml` and set environment values from `.env.production.example` in Coolify (or your secret manager).

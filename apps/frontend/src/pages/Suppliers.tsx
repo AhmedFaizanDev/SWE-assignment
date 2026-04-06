@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit2, Trash2, Star, Mail, Phone, MapPin, Truck } from 'lucide-react';
+import { Plus, Edit2, Trash2, Star, Mail, Phone, MapPin, Truck, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,14 +9,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useInventory } from '@/contexts/InventoryContext';
-import { Supplier } from '@/data/mockData';
+import { Supplier } from '@/data/types';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 const emptyForm = { name: '', contactPerson: '', email: '', phone: '', address: '', itemsSupplied: [] as string[], lastPurchaseDate: '', totalOrders: 0, rating: 4 };
 
 export default function Suppliers() {
-  const { suppliers, inventory, addSupplier, updateSupplier, deleteSupplier } = useInventory();
+  const { suppliers, inventory, addSupplier, updateSupplier, deleteSupplier, isLoading, suppliersError } = useInventory();
   const [modalOpen, setModalOpen] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
   const [viewSupplier, setViewSupplier] = useState<Supplier | null>(null);
@@ -28,7 +28,7 @@ export default function Suppliers() {
   const openEdit = (s: Supplier) => {
     setEditSupplier(s);
     setForm({ name: s.name, contactPerson: s.contactPerson, email: s.email, phone: s.phone, address: s.address, itemsSupplied: s.itemsSupplied, lastPurchaseDate: s.lastPurchaseDate, totalOrders: s.totalOrders, rating: s.rating });
-    setItemsText(s.itemsSupplied.join(', '));
+    setItemsText((s.itemsSupplied ?? []).join(', '));
     setModalOpen(true);
   };
 
@@ -37,20 +37,36 @@ export default function Suppliers() {
     const data = { ...form, itemsSupplied: itemsText.split(',').map(s => s.trim()).filter(Boolean) };
     if (editSupplier) {
       updateSupplier(editSupplier.id, data);
-      toast.success('Supplier updated');
     } else {
       addSupplier(data);
-      toast.success('Supplier added');
     }
     setModalOpen(false);
   };
 
   const handleDelete = () => {
-    if (deleteId) { deleteSupplier(deleteId); toast.success('Supplier deleted'); setDeleteId(null); }
+    if (deleteId) { deleteSupplier(deleteId); setDeleteId(null); }
   };
 
   const getSupplierItems = (supplierName: string) =>
     inventory.filter(i => i.supplier === supplierName);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (suppliersError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+        <p className="text-sm font-medium">Failed to load suppliers</p>
+        <p className="text-xs text-muted-foreground mt-1">Please check that the API server is running and try refreshing.</p>
+      </div>
+    );
+  }
 
   // Empty state
   if (suppliers.length === 0) {
@@ -95,10 +111,10 @@ export default function Suppliers() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1 mb-3">
-                  {s.itemsSupplied.slice(0, 3).map(item => (
+                  {(s.itemsSupplied ?? []).slice(0, 3).map(item => (
                     <Badge key={item} variant="secondary" className="text-[10px]">{item}</Badge>
                   ))}
-                  {s.itemsSupplied.length > 3 && <Badge variant="secondary" className="text-[10px]">+{s.itemsSupplied.length - 3}</Badge>}
+                  {(s.itemsSupplied ?? []).length > 3 && <Badge variant="secondary" className="text-[10px]">+{(s.itemsSupplied ?? []).length - 3}</Badge>}
                 </div>
                 <div className="flex justify-between items-center text-xs text-muted-foreground">
                   <span>{s.totalOrders} orders</span>
@@ -132,7 +148,7 @@ export default function Suppliers() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Items Supplied</p>
                 <div className="flex flex-wrap gap-1">
-                  {viewSupplier.itemsSupplied.map(i => <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>)}
+                  {(viewSupplier.itemsSupplied ?? []).map(i => <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>)}
                 </div>
               </div>
               {/* Items in inventory */}

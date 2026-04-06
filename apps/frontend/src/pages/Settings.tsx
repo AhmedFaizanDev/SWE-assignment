@@ -53,7 +53,7 @@ export default function Settings() {
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary text-lg font-bold">
                 {user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?'}
               </div>
-              <div className="text-sm text-muted-foreground">Avatar upload coming soon</div>
+              <div className="text-sm text-muted-foreground">{user?.name || 'User'}</div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="settings-name">Display name</Label>

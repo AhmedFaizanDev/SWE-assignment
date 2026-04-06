@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useInventory } from '@/contexts/InventoryContext';
+import { useContext, useState, type FormEvent } from 'react';
+import { InventoryContext } from '@/contexts/InventoryContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
 
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -19,10 +19,14 @@ const pageTitles: Record<string, string> = {
   '/reports': 'Reports & Analytics',
   '/settings': 'Settings',
   '/activity': 'Activity Feed',
+  '/ai-insights': 'AI Insights',
+  '/analytics': 'Analytics Dashboard',
+  '/alerts': 'Alerts Center',
 };
 
 export function TopBar() {
-  const { activities } = useInventory();
+  const inventoryCtx = useContext(InventoryContext);
+  const activities = inventoryCtx?.activities ?? [];
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -32,7 +36,7 @@ export function TopBar() {
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     if (searchVal.trim()) {
       navigate(`/inventory?q=${encodeURIComponent(searchVal.trim())}`);
@@ -69,7 +73,7 @@ export function TopBar() {
         <div className="flex items-center gap-2">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
+              <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
                 <Bell className="h-[18px] w-[18px]" />
                 {recentNotifs.length > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
@@ -80,11 +84,11 @@ export function TopBar() {
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80 p-0">
               <div className="p-3 border-b border-border">
-                <h3 className="font-semibold text-sm">Notifications</h3>
+                <h3 className="font-semibold text-sm">Recent Activity</h3>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {recentNotifs.length === 0 ? (
-                  <p className="p-4 text-sm text-muted-foreground text-center">No notifications</p>
+                  <p className="p-4 text-sm text-muted-foreground text-center">No recent activity</p>
                 ) : (
                   recentNotifs.map(n => (
                     <div key={n.id} className="px-3 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/50 transition-colors">

@@ -87,10 +87,9 @@ export default function Landing() {
             <Wrench className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium text-muted-foreground">EngInventory</span>
           </div>
-          <div className="flex gap-6 text-xs text-muted-foreground">
-            <span className="hover:text-foreground cursor-pointer transition-colors">Privacy</span>
-            <span className="hover:text-foreground cursor-pointer transition-colors">Terms</span>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} EngInventory. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>

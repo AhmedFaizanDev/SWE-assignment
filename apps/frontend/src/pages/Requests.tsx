@@ -22,7 +22,7 @@ const statusStyles: Record<string, string> = {
 const statusFilters = ['All', 'Pending', 'Approved', 'Rejected', 'Issued'] as const;
 
 export default function Requests() {
-  const { requests, inventory, addRequest, updateRequestStatus } = useInventory();
+  const { requests, inventory, addRequest, updateRequestStatus, isLoading, requestsError, inventoryError } = useInventory();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ itemId: '', requestedQty: 1, requestedBy: '', notes: '' });
   const [filter, setFilter] = useState<string>('All');
@@ -44,17 +44,32 @@ export default function Requests() {
       status: 'Pending',
       notes: form.notes,
     });
-    toast.success('Request submitted');
     setModalOpen(false);
     setForm({ itemId: '', requestedQty: 1, requestedBy: '', notes: '' });
   };
 
   const handleAction = (id: string, status: 'Approved' | 'Rejected' | 'Issued') => {
     updateRequestStatus(id, status);
-    toast.success(`Request ${status.toLowerCase()}`);
   };
 
-  // Empty state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (requestsError || inventoryError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+        <p className="text-sm font-medium">Failed to load requests</p>
+        <p className="text-xs text-muted-foreground mt-1">Please check that the API server is running and try refreshing.</p>
+      </div>
+    );
+  }
+
   if (requests.length === 0) {
     return (
       <div className="space-y-4">

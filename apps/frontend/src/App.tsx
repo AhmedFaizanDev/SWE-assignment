@@ -3,9 +3,9 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { InventoryProvider } from "@/contexts/InventoryContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ApiError } from "@/lib/api";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -17,9 +17,27 @@ import Suppliers from "./pages/Suppliers";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Activity from "./pages/Activity";
+import AIInsights from "./pages/AIInsights";
+import Analytics from "./pages/Analytics";
+import AlertsCenter from "./pages/AlertsCenter";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 20_000,
+      refetchOnWindowFocus: true,
+      retry: (failureCount, err) => {
+        if (err instanceof ApiError) {
+          if (err.status === 429) return false;
+          if (err.status >= 400 && err.status < 500 && err.status !== 408) return false;
+        }
+        return failureCount < 2;
+      },
+    },
+    mutations: { retry: false },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -50,6 +68,9 @@ const AppRoutes = () => (
       <Route path="/reports" element={<Reports />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/activity" element={<Activity />} />
+      <Route path="/ai-insights" element={<AIInsights />} />
+      <Route path="/analytics" element={<Analytics />} />
+      <Route path="/alerts" element={<AlertsCenter />} />
     </Route>
 
     <Route path="*" element={<NotFound />} />
@@ -62,11 +83,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <InventoryProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </InventoryProvider>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AppRoutes />
+        </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

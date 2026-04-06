@@ -1,0 +1,364 @@
+import json
+import logging
+
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.decorators import api_view, throttle_classes
+from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+
+from .client import call_openai
+from .context_builder import build_full_context, build_inventory_summary, build_activity_summary, build_supplier_summary, build_borrowed_summary, build_item_context
+from .models import InsightRecord, AISuggestion, AIInteraction
+from .prompts import TEMPLATES
+from .serializers import InsightRecordSerializer, AISuggestionSerializer, AIInteractionSerializer
+from .rag import build_rag_context
+
+logger = logging.getLogger(__name__)
+
+
+class AIWriteThrottle(AnonRateThrottle):
+    """Rate limit for OpenAI-backed endpoints (costly). Scope: ai_write."""
+    scope = 'ai_write'
+
+
+class AIInsightsListThrottle(AnonRateThrottle):
+    """GET /ai/insights/ is a cheap DB read; POST uses OpenAI — scope per method."""
+    scope = 'ai_insights_read'
+
+    def allow_request(self, request, view):
+        self.scope = 'ai_insights_read' if request.method == 'GET' else 'ai_write'
+        self.rate = None
+        return super().allow_request(request, view)
+
+
+@api_view(['POST'])
+@throttle_classes([AIWriteThrottle])
+def ai_query(request):
+    """Natural-language Q&A grounded in live inventory data."""
+    question = request.data.get('question', '').strip()
+    if not question:
+        return Response({'detail': 'question is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    rag_context, retrieved_chunks = build_rag_context(question=question, limit=8)
+    context = rag_context if retrieved_chunks else build_full_context()
+    tpl = TEMPLATES['query']
+    user_prompt = tpl['user'].format(context=context, question=question)
+
+    result = call_openai(
+        system_prompt=tpl['system'],
+        user_prompt=user_prompt,
+        model=tpl['model'],
+        max_tokens=tpl['max_tokens'],
+        temperature=tpl['temperature'],
+        interaction_type='query',
+        user_input=question,
+        context_summary=context[:500],
+    )
+
+    if result.get('fallback'):
+        return Response({
+            'answer': 'AI service is currently unavailable. Please check your OpenAI API key configuration.',
+            'confidence': 0,
+            'suggestedActions': [],
+            'relatedItems': [],
+            'meta': {'requestId': result.get('request_id', ''), 'fallback': True},
+        })
+
+    data = result.get('data', {})
+
+    def _to_text_answer(raw_answer):
+        if raw_answer is None:
+            return ''
+        if isinstance(raw_answer, str):
+            s = raw_answer.strip()
+            if not s:
+                return ''
+            # Some model responses still serialize structured objects into "answer".
+            if (s.startswith('{') and s.endswith('}')) or (s.startswith('[') and s.endswith(']')):
+                try:
+                    raw_answer = json.loads(s)
+                except Exception:
+                    return s
+            else:
+                return s
+
+        if isinstance(raw_answer, dict):
+            if 'summary' in raw_answer and isinstance(raw_answer['summary'], str):
+                return raw_answer['summary'].strip()
+            key_vals = []
+            for k, v in raw_answer.items():
+                if isinstance(v, list) and v and isinstance(v[0], dict):
+                    # Render list-of-records as readable lines.
+                    lines = [f'{k}:']
+                    for row in v[:8]:
+                        parts = [f'{kk}: {vv}' for kk, vv in row.items()]
+                        lines.append(f"- {', '.join(parts)}")
+                    key_vals.append('\n'.join(lines))
+                else:
+                    key_vals.append(f'{k}: {v}')
+            return '\n'.join(key_vals)
+
+        if isinstance(raw_answer, list):
+            return '\n'.join(f'- {x}' for x in raw_answer[:12])
+
+        return str(raw_answer)
+
+    answer = _to_text_answer(data.get('answer', ''))
+
+    confidence = data.get('confidence', 0)
+    try:
+        confidence = float(confidence)
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    suggested_actions = data.get('suggestedActions', data.get('suggested_actions', []))
+    if not isinstance(suggested_actions, list):
+        suggested_actions = [str(suggested_actions)] if suggested_actions else []
+
+    related_items = data.get('relatedItems', data.get('related_items', []))
+    if not isinstance(related_items, list):
+        related_items = [str(related_items)] if related_items else []
+
+    citations = data.get('citations', [])
+    if not isinstance(citations, list):
+        citations = []
+    citations = [str(c) for c in citations if c]
+    # Normalize model citations to known retrieval ids (e.g., map R1 -> first retrieved chunk).
+    if retrieved_chunks:
+        valid_ids = [c.chunk_id for c in retrieved_chunks]
+        normalized: list[str] = []
+        for c in citations:
+            if c in valid_ids:
+                normalized.append(c)
+                continue
+            m = c.strip().upper()
+            if m.startswith("R") and m[1:].isdigit():
+                idx = int(m[1:]) - 1
+                if 0 <= idx < len(valid_ids):
+                    normalized.append(valid_ids[idx])
+        citations = list(dict.fromkeys(normalized)) or valid_ids[:3]
+
+    return Response({
+        'answer': answer,
+        'confidence': confidence,
+        'citations': citations,
+        'suggestedActions': suggested_actions,
+        'relatedItems': related_items,
+        'meta': {
+            'requestId': result.get('request_id', ''),
+            'model': result.get('model', ''),
+            'tokens': result.get('tokens', 0),
+            'costUsd': result.get('cost_usd', 0),
+            'latencyMs': result.get('latency_ms', 0),
+            'retrieval': [
+                {
+                    'chunkId': c.chunk_id,
+                    'source': c.source,
+                    'title': c.title,
+                    'score': c.score,
+                }
+                for c in retrieved_chunks
+            ],
+        },
+    })
+
+
+@api_view(['GET', 'POST'])
+@throttle_classes([AIInsightsListThrottle])
+def ai_insights(request):
+    """GET: return active insights. POST: generate fresh insights via AI."""
+    if request.method == 'GET':
+        qs = InsightRecord.objects.filter(status='active').order_by('-severity', '-confidence', '-created_at')[:20]
+        return Response(InsightRecordSerializer(qs, many=True).data)
+
+    tpl = TEMPLATES['insights']
+    user_prompt = tpl['user'].format(
+        inventory_summary=build_inventory_summary(),
+        activity_summary=build_activity_summary(),
+        supplier_summary=build_supplier_summary(),
+        borrowed_summary=build_borrowed_summary(),
+    )
+
+    result = call_openai(
+        system_prompt=tpl['system'],
+        user_prompt=user_prompt,
+        model=tpl['model'],
+        max_tokens=tpl['max_tokens'],
+        temperature=tpl['temperature'],
+        interaction_type='insight',
+        context_summary=user_prompt[:500],
+    )
+
+    if result.get('fallback'):
+        return Response({
+            'insights': [],
+            'meta': {'requestId': result.get('request_id', ''), 'fallback': True, 'error': result.get('error', '')},
+        })
+
+    raw = result.get('data', [])
+    if isinstance(raw, dict):
+        raw = raw.get('insights', raw.get('data', []))
+    if not isinstance(raw, list):
+        raw = []
+
+    interaction = AIInteraction.objects.filter(request_id=result.get('request_id', '')).first()
+    created = []
+    for item in raw[:5]:
+        try:
+            record = InsightRecord.objects.create(
+                title=item.get('title', 'Untitled Insight')[:255],
+                description=item.get('description', ''),
+                category=item.get('category', 'operational'),
+                severity=item.get('severity', 'info'),
+                confidence=float(item.get('confidence', 0)),
+                impact_estimate=item.get('impactEstimate', item.get('impact_estimate', '')),
+                recommended_action=item.get('recommendedAction', item.get('recommended_action', '')),
+                evidence=item.get('evidence', {}),
+                related_item_ids=item.get('relatedItemIds', item.get('related_item_ids', [])),
+                related_supplier_ids=item.get('relatedSupplierIds', item.get('related_supplier_ids', [])),
+                ai_interaction=interaction,
+            )
+            created.append(record)
+        except Exception as exc:
+            logger.warning('Failed to save insight: %s', exc)
+
+    return Response({
+        'insights': InsightRecordSerializer(created, many=True).data,
+        'meta': {
+            'requestId': result.get('request_id', ''),
+            'model': result.get('model', ''),
+            'tokens': result.get('tokens', 0),
+            'costUsd': result.get('cost_usd', 0),
+            'latencyMs': result.get('latency_ms', 0),
+        },
+    })
+
+
+@api_view(['POST'])
+@throttle_classes([AIWriteThrottle])
+def ai_simulate_reorder(request):
+    """What-if reorder simulation for a specific item."""
+    item_id = request.data.get('itemId')
+    if not item_id:
+        return Response({'detail': 'itemId is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    ctx = build_item_context(int(item_id))
+    if not ctx:
+        return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    tpl = TEMPLATES['simulation']
+    user_prompt = tpl['user'].format(**ctx)
+
+    result = call_openai(
+        system_prompt=tpl['system'],
+        user_prompt=user_prompt,
+        model=tpl['model'],
+        max_tokens=tpl['max_tokens'],
+        temperature=tpl['temperature'],
+        interaction_type='simulation',
+        user_input=f'item_id={item_id}',
+        context_summary=str(ctx)[:500],
+    )
+
+    if result.get('fallback'):
+        return Response({
+            'simulation': None,
+            'meta': {'requestId': result.get('request_id', ''), 'fallback': True, 'error': result.get('error', '')},
+        })
+
+    data = result.get('data', {})
+    return Response({
+        'simulation': data,
+        'meta': {
+            'requestId': result.get('request_id', ''),
+            'model': result.get('model', ''),
+            'tokens': result.get('tokens', 0),
+            'costUsd': result.get('cost_usd', 0),
+            'latencyMs': result.get('latency_ms', 0),
+        },
+    })
+
+
+@api_view(['PATCH'])
+def insight_feedback(request, pk):
+    """Submit feedback on an insight."""
+    try:
+        insight = InsightRecord.objects.get(pk=pk)
+    except InsightRecord.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    feedback = request.data.get('feedback', '')
+    comment = request.data.get('comment', '')
+    new_status = request.data.get('status', '')
+
+    if feedback:
+        insight.feedback = feedback
+    if comment:
+        insight.feedback_comment = comment
+    if new_status in ('acknowledged', 'resolved', 'dismissed'):
+        insight.status = new_status
+
+    insight.save()
+    return Response(InsightRecordSerializer(insight).data)
+
+
+@api_view(['GET'])
+def suggestion_list(request):
+    """List AI-generated suggestions."""
+    approval_status = request.query_params.get('status', 'pending')
+    qs = AISuggestion.objects.filter(approval_status=approval_status)[:50]
+    return Response(AISuggestionSerializer(qs, many=True).data)
+
+
+@api_view(['PATCH'])
+def suggestion_action(request, pk):
+    """Approve or reject an AI suggestion."""
+    try:
+        suggestion = AISuggestion.objects.get(pk=pk)
+    except AISuggestion.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    action = request.data.get('action')
+    if action == 'approve':
+        suggestion.approval_status = 'approved'
+        suggestion.approved_by = request.data.get('approvedBy', 'Admin')
+        suggestion.approved_at = timezone.now()
+    elif action == 'reject':
+        suggestion.approval_status = 'rejected'
+        suggestion.rejection_reason = request.data.get('reason', '')
+    elif action == 'execute':
+        if suggestion.approval_status != 'approved':
+            return Response({'detail': 'Must be approved before execution.'}, status=status.HTTP_409_CONFLICT)
+        suggestion.approval_status = 'executed'
+    else:
+        return Response({'detail': 'action must be approve, reject, or execute.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    suggestion.save()
+    return Response(AISuggestionSerializer(suggestion).data)
+
+
+@api_view(['GET'])
+def ai_usage_stats(request):
+    """Token/cost usage stats for observability."""
+    days = int(request.query_params.get('days', '30'))
+    since = timezone.now() - timezone.timedelta(days=days)
+    qs = AIInteraction.objects.filter(created_at__gte=since)
+
+    from django.db.models import Sum, Count, Avg
+    stats = qs.aggregate(
+        total_calls=Count('id'),
+        total_tokens=Sum('total_tokens'),
+        total_cost=Sum('cost_usd'),
+        avg_latency=Avg('latency_ms'),
+    )
+    error_count = qs.exclude(error='').count()
+
+    return Response({
+        'period_days': days,
+        'totalCalls': stats['total_calls'] or 0,
+        'totalTokens': stats['total_tokens'] or 0,
+        'totalCostUsd': round(stats['total_cost'] or 0, 4),
+        'avgLatencyMs': round(stats['avg_latency'] or 0, 1),
+        'errorCount': error_count,
+    })

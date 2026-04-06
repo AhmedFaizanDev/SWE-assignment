@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useInventory } from '@/contexts/InventoryContext';
-import { InventoryItem } from '@/data/mockData';
+import { InventoryItem } from '@/data/types';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 
@@ -33,7 +33,7 @@ function StatusBadge({ item }: { item: InventoryItem }) {
 const emptyForm = { name: '', category: 'Electronics' as InventoryItem['category'], quantity: 0, minThreshold: 5, location: '', supplier: '', purchaseDate: '', notes: '', unitPrice: 0 };
 
 export default function Inventory() {
-  const { inventory, suppliers, addInventoryItem, updateInventoryItem, deleteInventoryItem } = useInventory();
+  const { inventory, suppliers, addInventoryItem, updateInventoryItem, deleteInventoryItem, isLoading, inventoryError } = useInventory();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQ = searchParams.get('q') || '';
   const [search, setSearch] = useState(initialQ);
@@ -84,21 +84,36 @@ export default function Inventory() {
     if (!form.location) { toast.error('Location is required'); return; }
     if (editItem) {
       updateInventoryItem(editItem.id, form);
-      toast.success('Item updated');
     } else {
       addInventoryItem(form);
-      toast.success('Item added');
     }
     setModalOpen(false);
   };
 
   const handleDelete = () => {
-    if (deleteId) { deleteInventoryItem(deleteId); toast.success('Item deleted'); setDeleteId(null); }
+    if (deleteId) { deleteInventoryItem(deleteId); setDeleteId(null); }
   };
 
   const SortIcon = ({ col }: { col: keyof InventoryItem }) => sortKey === col ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 inline ml-0.5" /> : <ChevronDown className="h-3 w-3 inline ml-0.5" />) : null;
 
-  // Empty state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (inventoryError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <Package className="h-10 w-10 text-destructive mb-3" />
+        <p className="text-sm font-medium">Failed to load inventory</p>
+        <p className="text-xs text-muted-foreground mt-1">Please check that the API server is running and try refreshing.</p>
+      </div>
+    );
+  }
+
   if (inventory.length === 0 && !search) {
     return (
       <div className="space-y-4">
@@ -278,7 +293,7 @@ export default function Inventory() {
                 ['ID', viewItem.id], ['Category', viewItem.category], ['Quantity', viewItem.quantity],
                 ['Min Threshold', viewItem.minThreshold], ['Location', viewItem.location],
                 ['Supplier', viewItem.supplier], ['Purchase Date', viewItem.purchaseDate],
-                ['Unit Price', `$${viewItem.unitPrice.toFixed(2)}`], ['Notes', viewItem.notes],
+                ['Unit Price', `$${(viewItem.unitPrice ?? 0).toFixed(2)}`], ['Notes', viewItem.notes || '—'],
               ].map(([label, val]) => (
                 <div key={String(label)} className="flex justify-between">
                   <span className="text-muted-foreground">{label}</span>

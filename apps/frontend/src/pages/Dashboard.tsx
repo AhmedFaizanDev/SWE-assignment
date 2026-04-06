@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useInventory } from '@/contexts/InventoryContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { categoryColors } from '@/data/mockData';
+import { categoryColors } from '@/data/types';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -38,9 +38,27 @@ const activityIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Dashboard() {
-  const { inventory, requests, borrowedItems, activities } = useInventory();
+  const { inventory, requests, borrowedItems, activities, isLoading, inventoryError, requestsError, borrowedError } = useInventory();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (inventoryError || requestsError || borrowedError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+        <p className="text-sm font-medium">Failed to load dashboard data</p>
+        <p className="text-xs text-muted-foreground mt-1">Please check that the API server is running and try refreshing.</p>
+      </div>
+    );
+  }
 
   const totalItems = inventory.reduce((sum, i) => sum + i.quantity, 0);
   const lowStockItems = inventory.filter(i => i.quantity <= i.minThreshold);
@@ -147,11 +165,11 @@ export default function Dashboard() {
                     <motion.div key={a.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 + idx * 0.05 }}
                       className="flex gap-3 items-start">
                       <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-                        {activityIcons[a.type]}
+                        {activityIcons[a.type] ?? <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs text-foreground leading-relaxed">{a.description}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(a.timestamp).toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{a.timestamp ? new Date(a.timestamp).toLocaleString() : ''}</p>
                       </div>
                     </motion.div>
                   ))}

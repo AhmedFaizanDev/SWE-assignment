@@ -1,0 +1,677 @@
+\documentclass[12pt]{article}
+
+\usepackage[a4paper, margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{setspace}
+\usepackage{hyperref}
+
+\begin{document}
+
+% ============================================================
+% COVER PAGE
+% ============================================================
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\LARGE \textbf{Software Requirements Specification}}\\[0.5cm]
+{\large for}\\[0.5cm]
+{\LARGE \textbf{Engineering Resource Management System (ERMS)}}\\[0.5cm]
+{\large Version 1.3}\\[2cm]
+
+{\large Prepared by}\\[0.5cm]
+{\large \textbf{Group Name: ERMS Core Platform Team}}\\[1cm]
+
+\begin{tabular}{l l l}
+\textbf{Name} & \textbf{Student \#} & \textbf{Email} \\[0.3cm]
+Abhishek Gupta      & SE23UCSE011 & se23ucse011@mahindrauniversity.edu.in \\[0.3cm]
+Mohammed Sadath     & SE23UCSE230 & se23ucse230@mahindrauniversity.edu.in \\[0.3cm]
+Faizan Ahmed        & SE23UCSE003 & se23ucse003@mahindrauniversity.edu.in \\[0.3cm]
+Jai Sai Karthik Bonam & SE23UCSE040 & se23ucse040@mahindrauniversity.edu.in \\[0.3cm]
+Sharon Benhur       & SE23UCSE036 & se23ucse036@mahindrauniversity.edu.in \\[0.3cm]
+Gayatri Ravinder    & SE23UARI039 & se23uari039@mahindrauniversity.edu.in \\[0.3cm]
+\end{tabular}
+\vfill
+
+\begin{tabular}{l l}
+\textbf{Instructor:}       & Prof. Kg Krishna / Avinash Arun Chauhan \\[0.3cm]
+\textbf{Course:}           & Software Engineering \\[0.3cm]
+\textbf{Teaching Assistant:} & Sravanthi Acchugatla \\[0.3cm]
+\textbf{Date:}             & 6th April 2026 \\
+\end{tabular}
+
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section*{Revisions}
+
+\begin{center}
+\begin{tabular}{|c|p{3.5cm}|p{7.2cm}|c|}
+\hline
+Version & Primary Author(s) & Description of Version & Date Completed \\
+\hline
+1.0 & Abhishek Gupta & Initial SRS document for ERMS & 16/03/2026 \\
+\hline
+1.1 & Faizan Ahmed & Added Project Status Report & 16/03/2026 \\
+\hline
+1.2 & ERMS Development Team & Added deployment and monorepo updates & 30/03/2026 \\
+\hline
+1.3 & ERMS Core Platform Team & Aligned SRS with implemented Django API modules, corrected status details, and updated team structure & 06/04/2026 \\
+\hline
+\end{tabular}
+\end{center}
+
+\newpage
+
+% ============================================================
+% PROJECT STATUS REPORT
+% ============================================================
+
+\section{Project Status Report}
+
+\subsection{Assignment Summary and SRS Template Requirements}
+
+This project is part of the Software Engineering course, which requires the delivery of a functional software system accompanied by a Software Requirements Specification (SRS) document following the IEEE standard template. The SRS must cover the following sections:
+
+\begin{itemize}
+    \item \textbf{Introduction} -- Document purpose, product scope, intended audience, definitions, conventions, and references.
+    \item \textbf{Overall Description} -- Product overview, product functionality, design and implementation constraints, and assumptions.
+    \item \textbf{Specific Requirements} -- Functional requirements, external interface requirements (user, hardware, software), and use case model with actors and use case descriptions.
+    \item \textbf{Non-Functional Requirements} -- Performance, safety, security, reliability, maintainability, and usability requirements.
+    \item \textbf{Appendices} -- Data dictionary defining key system variables, and a group activity log summarizing weekly progress.
+\end{itemize}
+
+The system is modeled using UML techniques and developed using COMET (Concurrent Object Modeling and Architectural Design Method) practices. This document serves as the primary reference artifact for developers, testers, administrators, and instructors involved in the project.
+
+\subsection{Implemented System Description}
+
+The team has built a \textbf{Lab Inventory and Equipment Management} web application that serves as the practical implementation of the ERMS concept. The application allows users to manage laboratory inventory, track borrowed equipment, handle item requests, coordinate with suppliers, monitor alerts, and view AI-assisted analytics from a unified web interface.
+
+The following pages and modules are implemented in the frontend:
+
+\begin{itemize}
+    \item \textbf{Dashboard} -- High-level overview of system activity including inventory summaries, pending requests, overdue equipment indicators, and key metrics.
+    \item \textbf{Inventory} -- View, add, edit, and delete inventory items by category and location.
+    \item \textbf{Requests} -- Submit and process item requests with statuses: \texttt{Pending}, \texttt{Approved}, \texttt{Rejected}, and \texttt{Issued}.
+    \item \textbf{Borrowed Equipment} -- Track borrowed items with expected return and overdue highlighting.
+    \item \textbf{Suppliers} -- Manage supplier profiles with contact details.
+    \item \textbf{Reports} -- Usage and inventory reporting views powered by backend report endpoints.
+    \item \textbf{Activity} -- Chronological activity feed for system events.
+    \item \textbf{AI Insights} -- Natural language query, insight generation, and action suggestions.
+    \item \textbf{Analytics} -- KPI, stock-health, and demand-oriented analytical views.
+    \item \textbf{Alerts Center} -- Alert listing and lifecycle actions (acknowledge/resolve/dismiss).
+\end{itemize}
+
+\subsection{Technology Stack and Repository Structure}
+
+\subsubsection{Technology Stack}
+
+\begin{center}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Layer} & \textbf{Technology} \\
+\hline
+Frontend Framework & React with Vite and TypeScript \\
+Styling & Tailwind CSS \\
+UI Components & shadcn-ui \\
+State/Data Fetching & React Query \\
+Backend API & Django + Django REST Framework \\
+Database & PostgreSQL \\
+Cache & Redis \\
+Containerization & Docker + Docker Compose \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Repository Structure}
+
+The project is organized as a \textbf{monorepo} with the following top-level structure:
+
+\begin{verbatim}
+/
+|-- apps/
+|   |-- frontend/      # React + Vite + TypeScript application
+|   |-- api/           # Django REST API (inventory, requests, borrowed, suppliers, AI, alerts, analytics)
+|-- docs/              # Project documentation including SRS
+|-- docker-compose.yml
+|-- docker-compose.prod.yml
+|-- package.json       # Root monorepo configuration
+\end{verbatim}
+
+\subsection{Current Project Status}
+
+\begin{center}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Component} & \textbf{Status} & \textbf{Notes} \\
+\hline
+Frontend UI & Complete & Routing and module screens implemented \\
+Dashboard Page & Complete & Overview and KPI-oriented widgets active \\
+Inventory Module & Complete & CRUD flows integrated with API client \\
+Requests Module & Complete & Status workflow implemented \\
+Borrowed Equipment & Complete & Overdue tracking and return actions active \\
+Suppliers Module & Complete & Supplier CRUD supported \\
+Reports Module & Complete & Monthly usage and leaderboard views integrated \\
+Activity Module & Complete & Event feed available \\
+AI Insights Module & Complete & Query/insight/suggestion flows available \\
+Analytics Module & Complete & KPI and stock-health views available \\
+Alerts Module & Complete & Alert action workflow supported \\
+Backend API & In Progress & Core domain, analytics, AI, and alerts endpoints implemented \\
+Database Integration & Complete & PostgreSQL integration implemented \\
+Authentication & Planned & Frontend currently uses local mock session; backend auth/RBAC pending \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Next Steps}
+
+The following tasks are planned for the next development phase:
+
+\begin{enumerate}
+    \item \textbf{Backend Hardening} -- Complete validation, permissions, and production-grade error handling across all API modules.
+    \item \textbf{Authentication and Authorization} -- Replace local mock session with backend user authentication and role-based access control (Admin vs. User).
+    \item \textbf{Automated Testing Expansion} -- Increase unit, integration, and end-to-end coverage for critical workflows.
+    \item \textbf{Production Monitoring} -- Add operational monitoring/alerting for API health, latency, and background risk computation.
+    \item \textbf{Data Quality and Audit Improvements} -- Strengthen audit logging for inventory/request/borrow/supplier lifecycle events.
+    \item \textbf{SRS and UML Finalization} -- Keep this document and UML artifacts synchronized with final implementation.
+\end{enumerate}
+
+\newpage
+
+% ============================================================
+% ORIGINAL SRS CONTENT
+% ============================================================
+
+\section{Introduction}
+
+The Engineering Resource Management System (ERMS) is a web-based Lab Inventory and Equipment Management platform designed for engineering institutions and laboratories. The system enables users to manage laboratory inventory items, submit and track equipment requests, monitor borrowed equipment, coordinate with suppliers, and view usage metrics through a central dashboard.
+
+This document presents the software requirements specification for the ERMS system. It outlines the system scope, intended users, system features, functional requirements, and non-functional requirements required for the development and deployment of the system.
+
+\subsection{Document Purpose}
+
+The purpose of this document is to describe the software requirements of the Engineering Resource Management System (ERMS). This document acts as a guideline for developers, testers, project managers, and instructors involved in the development and evaluation of the system.
+
+This SRS defines the functionality, constraints, system interfaces, and operational characteristics required for the ERMS software. It ensures that all stakeholders have a common understanding of the expected system behavior and design requirements.
+
+\subsection{Product Scope}
+
+The Engineering Resource Management System is a Lab Inventory and Equipment Management application intended for use in engineering departments and research laboratories. The system provides a centralized platform for tracking physical inventory items (Electronics, Mechanical, Tools, and Consumables), managing item request workflows, monitoring borrowed equipment and overdue returns, administering supplier relationships, and presenting usage analytics through a dashboard.
+
+The primary objective of ERMS is to reduce inventory loss, streamline item request approvals, and give administrators real-time visibility into equipment usage. The system benefits lab administrators, faculty, and students by replacing manual spreadsheets and informal borrowing records with a structured, auditable digital workflow.
+
+\subsection{Intended Audience and Document Overview}
+
+This document is intended for the following stakeholders:
+
+\begin{itemize}
+\item Software developers implementing the system
+\item Project supervisors and instructors
+\item System administrators managing resources
+\item Users such as students and faculty
+\item Testers validating system functionality
+\end{itemize}
+
+The document begins with an introduction describing the system and its scope. The overall description section explains the system context and features. The specific requirements section outlines functional and interface requirements. The final sections describe non-functional requirements and supporting documentation.
+
+\subsection{Definitions, Acronyms and Abbreviations}
+
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+Acronym & Meaning \\
+\hline
+ERMS & Engineering Resource Management System \\
+SRS & Software Requirements Specification \\
+UI & User Interface \\
+DB & Database \\
+Admin & System Administrator \\
+API & Application Programming Interface \\
+UML & Unified Modeling Language \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Document Conventions}
+
+This document follows the IEEE Software Requirements Specification format. A structured numbering scheme is used for sections and subsections. Tables and lists are used to present information clearly.
+
+\subsection{References and Acknowledgments}
+
+\begin{itemize}
+\item IEEE Software Requirements Specification Guidelines
+\item Software Engineering course materials
+\item UML Modeling Standards
+\item COMET Software Design Method
+\end{itemize}
+
+\section{Overall Description}
+
+\subsection{Product Overview}
+
+The Engineering Resource Management System is a web-based application designed to manage engineering resources within an academic institution or organization.
+
+The system allows users to search, request, borrow, and track laboratory equipment and consumables. Administrators manage resources, process requests, maintain supplier records, and monitor usage through analytics and alerts.
+
+\subsection{Product Functionality}
+
+Major functions of the implemented system include:
+
+\begin{itemize}
+\item View and manage inventory items (add, edit, delete; with category, quantity, location, and supplier fields)
+\item Submit item requests and manage request lifecycle (Pending $\rightarrow$ Approved/Rejected $\rightarrow$ Issued)
+\item Track borrowed equipment including borrower details, borrow date, return date, and overdue status
+\item Manage supplier profiles (company name, contact person, email, phone, address)
+\item View dashboard with usage charts, inventory summaries, pending request counts, and overdue alerts
+\item Generate inventory and usage reports from backend report endpoints
+\item Access activity feed of system events
+\item Use AI-assisted querying and insights for decision support
+\item Monitor analytics and stock-health indicators
+\item Manage alerts through acknowledge/resolve/dismiss lifecycle
+\item Use frontend route guards with local session persistence (current implementation); migrate to backend auth and RBAC
+\end{itemize}
+
+\subsection{Design and Implementation Constraints}
+
+\begin{itemize}
+\item The system must be designed using UML modeling techniques.
+\item The system must follow the COMET software engineering methodology.
+\item The frontend is implemented as a Single-Page Application (SPA) using React, Vite, and TypeScript.
+\item Styling uses Tailwind CSS; UI components are built with shadcn-ui.
+\item Data fetching and caching in frontend modules use React Query.
+\item The backend is implemented in Django REST Framework.
+\item The project is structured as a monorepo with \texttt{apps/frontend} and \texttt{apps/api}.
+\item PostgreSQL is used for persistent data storage and Redis for caching.
+\item Containerized deployment is supported via Docker Compose and production Docker manifests.
+\end{itemize}
+
+\subsection{Assumptions and Dependencies}
+
+\begin{itemize}
+\item Users have internet access to reach the deployed application.
+\item The backend API is reachable by the frontend via \texttt{VITE\_API\_URL}.
+\item The production deployment uses containerized services and managed infrastructure.
+\item Administrators are responsible for maintaining accurate inventory and supplier records.
+\item OpenAI-backed AI modules depend on valid model/API configuration in environment variables.
+\end{itemize}
+
+\section{Specific Requirements}
+
+\subsection{External Interface Requirements}
+
+\subsubsection{User Interfaces}
+
+The system is deployed as a Single-Page Application (SPA) accessible through any modern web browser. Navigation is provided through a persistent sidebar that links to all major modules. The main UI pages are:
+
+\begin{itemize}
+\item \textbf{Dashboard} -- Landing page displaying usage charts, total inventory count, pending request count, and overdue equipment alerts.
+\item \textbf{Inventory} -- Table view of all inventory items with add/edit support; filterable by category, location, and supplier.
+\item \textbf{Requests} -- Form to submit new item requests; table view of all requests filterable by status (Pending, Approved, Rejected, Issued).
+\item \textbf{Borrowed Equipment} -- List of currently borrowed items showing borrower name, borrow date, expected return date, and overdue status.
+\item \textbf{Suppliers} -- Directory of supplier companies with contact person, email, phone, and address; supports add and edit operations.
+\item \textbf{Reports} -- Section for usage and inventory reports.
+\item \textbf{Activity} -- Event timeline of resource and workflow updates.
+\item \textbf{AI Insights} -- Natural-language query and AI insight/suggestion panel.
+\item \textbf{Analytics} -- KPI and stock-health visualizations.
+\item \textbf{Alerts Center} -- Alert management with severity/status filtering.
+\end{itemize}
+
+\subsubsection{Hardware Interfaces}
+
+The system interacts with the following hardware:
+
+\begin{itemize}
+\item Institutional servers or cloud-hosted containers
+\item User devices such as laptops and desktops
+\item Network infrastructure
+\item Laboratory equipment or sensors (if integrated by institution)
+\end{itemize}
+
+\subsubsection{Software Interfaces}
+
+The system interfaces with:
+
+\begin{itemize}
+\item PostgreSQL database
+\item Redis cache
+\item OpenAI API (optional) for AI-powered modules
+\item Web browsers
+\item Docker runtime for local and production container orchestration
+\end{itemize}
+
+\subsection{Functional Requirements}
+
+\textbf{F1: Inventory Management}
+
+The system shall allow administrators and authorized users to view, add, edit, and delete inventory items. Each item shall have a name, category (Electronics/Mechanical/Tools/Consumables), quantity, storage location, and associated supplier.
+
+\textbf{F2: Item Request Workflow}
+
+The system shall allow users to submit requests for inventory items. Each request shall be tracked through the following status lifecycle: \texttt{Pending} $\rightarrow$ \texttt{Approved} or \texttt{Rejected} $\rightarrow$ \texttt{Issued}. Administrators shall be able to update request status from the Requests view.
+
+\textbf{F3: Borrowed Equipment Tracking}
+
+The system shall maintain records of all borrowed equipment including the borrower's name, borrow date, and expected return date. The system shall flag items as overdue when the return date has passed and the item has not been returned.
+
+\textbf{F4: Supplier Management}
+
+The system shall allow administrators to add and edit supplier records. Each supplier record shall include the company name, contact person, email address, phone number, and postal address.
+
+\textbf{F5: Dashboard and Reports}
+
+The system shall display a dashboard summarizing key metrics including total inventory items, pending requests, borrowed items, and overdue equipment. A dedicated Reports section shall provide usage and inventory analytics.
+
+\textbf{F6: User Authentication and Access Control}
+
+The system shall provide user login and protected routes. The current frontend implementation uses a local session model for route guarding; production deployment shall enforce authentication and role-based access control through backend authorization policies.
+
+\textbf{F7: Alerts Management}
+
+The system shall generate and list operational/resource alerts with severity and status attributes. Authorized users shall be able to acknowledge, resolve, or dismiss alerts.
+
+\textbf{F8: AI Insights and Analytics}
+
+The system shall provide AI-assisted query and insights endpoints, along with analytics endpoints for KPI and stock health, to support data-driven operational decisions.
+
+\subsection{Use Case Model}
+
+Actors involved:
+
+\begin{itemize}
+\item \textbf{User} -- A student or faculty member who can view inventory, submit item requests, and check borrowing status.
+\item \textbf{Administrator} -- A lab manager or staff member who approves/rejects requests, manages inventory and suppliers, and monitors borrowed equipment.
+\end{itemize}
+
+\subsubsection{Use Case U1: Request Equipment}
+
+\textbf{Purpose:} Allow users to request an inventory item; allow administrators to process that request.
+
+\textbf{Priority:} High
+
+\textbf{Actors:} User, Administrator
+
+\textbf{Preconditions:} The requested item exists in the inventory with available quantity greater than zero.
+
+\textbf{Postconditions:} Request record is created with the appropriate status; inventory quantity is decremented upon issuance.
+
+\textbf{Basic Flow}
+
+\begin{enumerate}
+\item User navigates to the Requests page.
+\item User fills in the request form (item, quantity, reason) and submits.
+\item System creates a request record with status \texttt{Pending}.
+\item Administrator reviews pending requests in the Requests view.
+\item Administrator approves or rejects the request; system updates status accordingly.
+\item Upon approval, administrator marks the request as \texttt{Issued}; system decrements inventory quantity.
+\end{enumerate}
+
+\textbf{Exceptions}
+
+Requested quantity exceeds available stock; administrator rejects or partially fulfils the request.
+
+\subsubsection{Use Case U2: Borrow Equipment}
+
+\textbf{Purpose:} Track items that are physically borrowed from the lab, including expected return and overdue status.
+
+\textbf{Priority:} High
+
+\textbf{Actors:} Administrator, User
+
+\textbf{Preconditions:} The item is present in inventory and available for borrowing.
+
+\textbf{Postconditions:} A borrowed-equipment record is created; item availability is updated. Overdue flag is set automatically when return date is exceeded.
+
+\textbf{Basic Flow}
+
+\begin{enumerate}
+\item Administrator opens the Borrowed Equipment page.
+\item Administrator creates a new borrow record specifying the item, borrower name, borrow date, and expected return date.
+\item System stores the record and marks the item status as Borrowed.
+\item On or after the return date, the system checks each record; items not yet returned are flagged as overdue.
+\item When the item is returned, the administrator updates the record to mark it returned; item status reverts to Available.
+\end{enumerate}
+
+\textbf{Exceptions}
+
+Borrower does not return item by the due date; system highlights the record as overdue for administrator follow-up.
+
+\subsubsection{Use Case U3: Manage Inventory}
+
+\textbf{Purpose:} Allow administrators to maintain accurate inventory records and supplier information.
+
+\textbf{Priority:} High
+
+\textbf{Actors:} Administrator
+
+\textbf{Preconditions:} Administrator has access to the Inventory and Suppliers pages.
+
+\textbf{Postconditions:} Inventory and supplier records reflect the latest changes.
+
+\textbf{Basic Flow}
+
+\begin{enumerate}
+\item Administrator navigates to the Inventory page.
+\item Administrator adds a new item by specifying name, category, quantity, location, and supplier; or edits an existing item.
+\item System saves the updated inventory record.
+\item Administrator navigates to the Suppliers page to add or edit a supplier profile (name, contact person, email, phone, address).
+\item System saves the updated supplier record.
+\end{enumerate}
+
+\textbf{Exceptions}
+
+Duplicate item or supplier entries are flagged for review before saving.
+
+\section{Other Non-functional Requirements}
+
+\subsection{Performance Requirements}
+
+\begin{itemize}
+\item Core CRUD API operations should respond within 2 seconds under normal load.
+\item The system should support at least 200 simultaneous users for web interactions.
+\item Dashboard, analytics, and alerts views should render data within 3 seconds for typical datasets.
+\end{itemize}
+
+\subsection{Safety and Security Requirements}
+
+\begin{itemize}
+\item Production deployment shall enforce secure backend authentication and protected route access.
+\item Role-based access control shall restrict administrative operations.
+\item Protection of inventory and request data in transit and at rest.
+\item Environment-based configuration for secrets and API keys.
+\end{itemize}
+
+\subsection{Software Quality Attributes}
+
+\subsubsection{Reliability}
+
+The system shall maintain stable operation with minimal downtime.
+
+\subsubsection{Maintainability}
+
+The system architecture shall be modular to support future enhancements.
+
+\subsubsection{Usability}
+
+The interface shall be intuitive and easy for users to navigate.
+
+\section{Other Requirements}
+
+The system database must maintain logs of:
+
+\begin{itemize}
+\item Inventory item changes (add, edit, delete)
+\item Item request lifecycle events (creation, approval, rejection, issuance)
+\item Borrowed equipment records and return events
+\item Supplier profile changes
+\item Alert status updates and AI insight actions (where applicable)
+\end{itemize}
+
+\section*{Appendix A -- Data Dictionary}
+
+\textbf{InventoryItem (API Contract)}
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+id & String (UUID) & Unique identifier for the inventory item \\
+name & String & Display name of the inventory item \\
+category & Enum & One of: Electronics, Mechanical, Tools, Consumables \\
+quantity & Integer & Current available quantity \\
+minThreshold & Integer & Minimum stock threshold for low-stock checks \\
+location & String & Physical storage location within the lab \\
+supplier & String & Supplier display name \\
+purchaseDate & Date & Purchase/acquisition date \\
+notes & String & Free-text notes for operators \\
+unitPrice & Decimal & Unit price used for valuation metrics \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{ItemRequest (API Contract)}
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+id & String (UUID) & Unique identifier for the request \\
+itemId & String (FK) & Reference to the requested InventoryItem \\
+itemName & String & Display name of the requested item \\
+requestedQty & Integer & Number of units requested \\
+requestedBy & String & Name or user ID of the requester \\
+requestDate & Date & Date on which request was submitted \\
+notes & String & Request comments/justification \\
+status & Enum & One of: Pending, Approved, Rejected, Issued \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{BorrowedItem (API Contract)}
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+id & String (UUID) & Unique identifier for the borrow record \\
+itemId & String (FK) & Reference to the borrowed InventoryItem \\
+equipmentName & String & Display name of borrowed item \\
+quantity & Integer & Number of units borrowed \\
+borrowedBy & String & Name of the person who borrowed the item \\
+borrowDate & Date & Date on which the item was borrowed \\
+expectedReturnDate & Date & Date by which the item should be returned \\
+actualReturnDate & Date (nullable) & Actual return date; null if not yet returned \\
+status & Enum & One of: Active, Returned, Overdue \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Supplier (API Contract)}
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+id & String (UUID) & Unique identifier for the supplier \\
+name & String & Name of the supplier company \\
+contactPerson & String & Name of the primary contact at the supplier \\
+email & String & Contact email address \\
+phone & String & Phone number in Indian format (\texttt{+91-XXXXX-XXXXX}) \\
+address & String & Full postal address of the supplier \\
+itemsSupplied & Array[String] & List of item names historically supplied \\
+lastPurchaseDate & Date (nullable) & Most recent purchase date from this supplier \\
+totalOrders & Integer & Historical order count linked to supplier \\
+rating & Decimal & Supplier rating used in analytics \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{ActivityEntry (API Contract)}
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+id & String (UUID) & Unique identifier for activity entry \\
+type & Enum & One of: issued, returned, restocked, requested, approved, rejected \\
+description & String & Human-readable activity description \\
+timestamp & DateTime & Event timestamp \\
+user & String & User/system actor label \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{AlertRecord (API Contract)}
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+id & String (UUID) & Unique identifier for the alert \\
+title & String & Alert title for UI display \\
+message & String & Descriptive message for operator action \\
+severity & Enum & One of: info, warning, critical \\
+status & Enum & One of: active, acknowledged, resolved, dismissed \\
+alertType & String & Domain type (stockout, overstock, supplier\_delay, etc.) \\
+itemId & String (nullable) & Linked inventory item id if applicable \\
+supplierId & String (nullable) & Linked supplier id if applicable \\
+riskScore & Decimal (nullable) & Normalized risk score in range 0.0--1.0 \\
+details & JSON (nullable) & Structured factors used for risk explanation \\
+createdAt & DateTime & Alert creation timestamp \\
+resolvedAt & DateTime (nullable) & Resolution timestamp \\
+\hline
+\end{tabular}
+\end{center}
+
+\section*{Appendix B -- Group Log}
+
+\begin{center}
+\begin{tabular}{|l|p{11cm}|}
+\hline
+\textbf{Meeting Date} & \textbf{Activity} \\
+\hline
+Week 1 & Project discussion and idea selection \\
+Week 2 & Requirement gathering \\
+Week 3 & UML design \\
+Week 4 & SRS preparation \\
+Week 5 & Frontend development -- Dashboard and Inventory modules \\
+Week 6 & Frontend development -- Requests and Borrowed Equipment modules \\
+Week 7 & Frontend development -- Suppliers module and mock data integration \\
+Week 8 & Frontend deployment; project status report preparation \\
+Week 9 & Backend API scaffolding and database schema design \\
+06/04/2026 & SRS v1.3 update: aligned document with implemented Django API modules, AI/Analytics/Alerts features, deployment stack, and updated professional team structure \\
+\hline
+\end{tabular}
+\end{center}
+
+\section*{Appendix C -- Team Structure (v1.3)}
+
+\begin{center}
+\begin{tabular}{|l|p{4.5cm}|p{5.5cm}|}
+\hline
+\textbf{Member} & \textbf{Role} & \textbf{Primary Responsibility} \\
+\hline
+Abhishek Gupta & Project Lead \& SRS Governance & Requirement validation, review checkpoints, final documentation quality \\
+\hline
+Mohammed Sadath & Frontend Module Lead & Dashboard, Inventory, Requests, and UI integration quality \\
+\hline
+Faizan Ahmed & Backend/API Lead & Django REST modules, data contracts, and deployment readiness \\
+\hline
+Jai Sai Karthik Bonam & Data \& Workflow Engineer & Request/borrow lifecycle logic, data consistency, and activity logging \\
+\hline
+Sharon Benhur & QA \& Testing Lead & Test planning, regression checks, and release validation \\
+\hline
+Gayatri Ravinder & UX \& Reporting Coordinator & User documentation, reporting outputs, and usability feedback consolidation \\
+\hline
+\end{tabular}
+\end{center}
+
+\end{document}

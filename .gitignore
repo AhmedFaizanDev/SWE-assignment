@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Secrets and local overrides (never commit)
+.env
+apps/frontend/.env
+apps/frontend/test-results/
+apps/frontend/playwright-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,8 +1,8 @@
 import {
   LayoutDashboard, Package, FileText, BookOpen, Truck, BarChart3, Wrench, Settings, LogOut,
+  Brain, Activity, Bell,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
-import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -17,12 +17,14 @@ const navItems = [
   { title: 'Borrowed', url: '/borrowed', icon: BookOpen },
   { title: 'Suppliers', url: '/suppliers', icon: Truck },
   { title: 'Reports', url: '/reports', icon: BarChart3 },
+  { title: 'AI Insights', url: '/ai-insights', icon: Brain },
+  { title: 'Analytics', url: '/analytics', icon: Activity },
+  { title: 'Alerts', url: '/alerts', icon: Bell },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const location = useLocation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 

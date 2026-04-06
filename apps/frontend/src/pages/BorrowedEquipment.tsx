@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, CalendarPlus, BookOpen, Package } from 'lucide-react';
+import { RotateCcw, CalendarPlus, BookOpen, Package, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useInventory } from '@/contexts/InventoryContext';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+
 import { cn } from '@/lib/utils';
 
 const statusStyles: Record<string, string> = {
@@ -18,23 +19,43 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function BorrowedEquipment() {
-  const { borrowedItems, returnBorrowedItem, extendReturnDate } = useInventory();
+  const { borrowedItems, returnBorrowedItem, extendReturnDate, isLoading, borrowedError } = useInventory();
   const [filter, setFilter] = useState<string>('all');
+  const [returnId, setReturnId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const filtered = filter === 'all' ? borrowedItems : borrowedItems.filter(b => b.status === filter);
 
-  const handleReturn = (id: string) => {
-    returnBorrowedItem(id);
-    toast.success('Equipment marked as returned');
+  const confirmReturn = () => {
+    if (returnId) {
+      returnBorrowedItem(returnId);
+      setReturnId(null);
+    }
   };
 
   const handleExtend = (id: string, date: Date | undefined) => {
     if (date) {
       extendReturnDate(id, date.toISOString().split('T')[0]);
-      toast.success('Return date extended');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (borrowedError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+        <p className="text-sm font-medium">Failed to load borrowed equipment</p>
+        <p className="text-xs text-muted-foreground mt-1">Please check that the API server is running and try refreshing.</p>
+      </div>
+    );
+  }
 
   // Empty state
   if (borrowedItems.length === 0) {
@@ -104,7 +125,7 @@ export default function BorrowedEquipment() {
                         <td className="py-3 px-4 text-right">
                           {item.status !== 'Returned' && (
                             <div className="flex gap-1 justify-end">
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-success text-xs" onClick={() => handleReturn(item.id)}>
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-success text-xs" onClick={() => setReturnId(item.id)}>
                                 <RotateCcw className="h-3 w-3" /> Return
                               </Button>
                               <Popover>
@@ -136,6 +157,21 @@ export default function BorrowedEquipment() {
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={!!returnId} onOpenChange={() => setReturnId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm return</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark the equipment as returned and add the quantity back to inventory. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReturn}>Confirm return</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
