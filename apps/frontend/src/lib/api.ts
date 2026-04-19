@@ -203,6 +203,10 @@ export const aiApi = {
     request<Array<import('@/data/types').AISuggestion>>(
       status ? `/ai/suggestions/?status=${encodeURIComponent(status)}` : '/ai/suggestions/',
     ),
+  generateSuggestions: () =>
+    request<{ suggestions: Array<import('@/data/types').AISuggestion>; meta: import('@/data/types').AIMeta }>('/ai/suggestions/generate/', {
+      method: 'POST',
+    }),
   suggestionAction: (id: string, action: string, extra?: Record<string, string>) =>
     request<import('@/data/types').AISuggestion>(`/ai/suggestions/${id}/`, {
       method: 'PATCH',

@@ -153,24 +153,43 @@ def call_openai(
 def embed_texts(texts: list[str], model: str = None) -> dict:
     """
     Create embeddings for one or more texts.
-    Returns {'embeddings': [...], 'model': '...'} on success, else {'fallback': True, 'error': '...'}.
+    Returns {'embeddings': [...], 'model': '...', 'tokens': int} on success,
+    else {'fallback': True, 'error': '...'}.
+    Logs an AIInteraction row for cost tracking.
     """
     if not texts:
-        return {'embeddings': [], 'model': model or getattr(settings, 'AI_EMBEDDING_MODEL', 'text-embedding-3-small')}
+        return {'embeddings': [], 'model': model or getattr(settings, 'AI_EMBEDDING_MODEL', 'text-embedding-3-small'), 'tokens': 0}
 
     client = _get_client()
     if client is None:
         return {'fallback': True, 'error': 'OpenAI client not available (missing API key or package).'}
 
     model = model or getattr(settings, 'AI_EMBEDDING_MODEL', 'text-embedding-3-small')
+    start = time.time()
     try:
         response = client.embeddings.create(
             model=model,
             input=texts,
             timeout=getattr(settings, 'AI_REQUEST_TIMEOUT_MS', 30000) / 1000,
         )
+        latency_ms = int((time.time() - start) * 1000)
         vectors = [row.embedding for row in response.data]
-        return {'embeddings': vectors, 'model': model}
+        total_tokens = response.usage.total_tokens if response.usage else 0
+        embed_cost = total_tokens / 1000 * 0.00002  # text-embedding-3-small pricing
+
+        AIInteraction.objects.create(
+            interaction_type='query',
+            user_input=f'embed:{len(texts)} texts',
+            context_summary=f'{len(texts)} chunks, {total_tokens} tokens',
+            model_used=model,
+            prompt_tokens=total_tokens,
+            total_tokens=total_tokens,
+            cost_usd=embed_cost,
+            latency_ms=latency_ms,
+            request_id=str(uuid.uuid4())[:12],
+        )
+
+        return {'embeddings': vectors, 'model': model, 'tokens': total_tokens}
     except Exception as exc:
         logger.error('OpenAI embedding call failed: %s', exc)
         return {'fallback': True, 'error': str(exc)}

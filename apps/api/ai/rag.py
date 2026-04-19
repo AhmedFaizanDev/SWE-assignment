@@ -1,10 +1,10 @@
 """
 Persistent RAG indexing + retrieval for chatbot grounding.
 
-Phase 2 design:
-- Build stable chunks from live operational records.
-- Persist chunks + embeddings in AI KnowledgeChunk table.
-- Hybrid retrieval (semantic + lexical) with graceful fallback.
+Token-cost notes:
+- Chunk text is kept under 200 chars to limit context window usage.
+- Default retrieval limit is 5 (not 8) to cap prompt tokens.
+- Query embeddings are cached for 5 min to avoid duplicate OpenAI calls.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import math
 import re
 from collections import Counter
 
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
@@ -27,6 +28,7 @@ from alerts.models import Alert
 from .client import embed_texts
 from .models import KnowledgeChunk
 
+QUERY_EMBED_CACHE_TTL = 300  # 5 minutes
 
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how",
@@ -78,113 +80,79 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (math.sqrt(na) * math.sqrt(nb))
 
 
-def _format_chunk_line(prefix: str, source: str, title: str, body: str, max_len: int = 280) -> str:
+def _format_chunk_line(prefix: str, source: str, title: str, body: str, max_len: int = 180) -> str:
     body = " ".join(body.split())
     if len(body) > max_len:
         body = f"{body[:max_len - 3]}..."
-    return f"{prefix} [{source}] {title}\n{body}"
+    return f"{prefix} [{source}] {title}: {body}"
 
 
 def build_live_chunks() -> list[RawChunk]:
+    """Build compact text chunks from live DB records.
+    Chunk text is kept short (~100-180 chars) to minimise embedding + prompt tokens."""
     chunks: list[RawChunk] = []
 
     for item in InventoryItem.objects.select_related("supplier").all():
-        supplier_name = item.supplier.name if item.supplier else "Unassigned supplier"
-        risk_tag = "out_of_stock" if item.quantity == 0 else ("low_stock" if item.quantity <= item.min_threshold else "healthy")
+        supplier_name = item.supplier.name if item.supplier else "none"
+        risk = "OOS" if item.quantity == 0 else ("low" if item.quantity <= item.min_threshold else "ok")
         text = (
-            f"Item {item.name} ({item.category}) at {item.location}. "
-            f"Quantity {item.quantity}, min threshold {item.min_threshold}, unit price {item.unit_price}. "
-            f"Supplier {supplier_name}. Status {risk_tag}."
+            f"{item.name} ({item.category}) @ {item.location}. "
+            f"qty {item.quantity}/{item.min_threshold} ${item.unit_price}. "
+            f"Supplier: {supplier_name}. {risk}."
         )
-        chunks.append(
-            RawChunk(
-                chunk_key=f"inventory:{item.id}",
-                source="inventory",
-                title=item.name,
-                text=text,
-                metadata={"itemId": item.id, "category": item.category},
-            )
-        )
+        chunks.append(RawChunk(
+            chunk_key=f"inventory:{item.id}", source="inventory",
+            title=item.name, text=text,
+            metadata={"itemId": item.id, "category": item.category},
+        ))
 
     for supplier in Supplier.objects.all():
-        text = (
-            f"Supplier {supplier.name} rating {supplier.rating}/5 with {supplier.total_orders} total orders. "
-            f"Contact: {supplier.contact_person}, {supplier.email}, {supplier.phone}."
-        )
-        chunks.append(
-            RawChunk(
-                chunk_key=f"supplier:{supplier.id}",
-                source="suppliers",
-                title=supplier.name,
-                text=text,
-                metadata={"supplierId": supplier.id},
-            )
-        )
+        text = f"{supplier.name} r{supplier.rating}/5, {supplier.total_orders} orders. {supplier.contact_person}, {supplier.email}."
+        chunks.append(RawChunk(
+            chunk_key=f"supplier:{supplier.id}", source="suppliers",
+            title=supplier.name, text=text,
+            metadata={"supplierId": supplier.id},
+        ))
 
-    for req in ItemRequest.objects.select_related("item").order_by("-request_date")[:120]:
+    for req in ItemRequest.objects.select_related("item").order_by("-request_date")[:60]:
         item_name = req.item.name if req.item else req.item_name
-        text = (
-            f"Request {req.id} for {item_name}: quantity {req.requested_qty}, status {req.status}, "
-            f"requested by {req.requested_by} on {req.request_date}."
-        )
-        chunks.append(
-            RawChunk(
-                chunk_key=f"request:{req.id}",
-                source="requests",
-                title=f"Request {req.id}",
-                text=text,
-                metadata={"requestId": req.id, "status": req.status},
-            )
-        )
+        text = f"Req {req.id}: {item_name} x{req.requested_qty}, {req.status}, by {req.requested_by} {req.request_date}."
+        chunks.append(RawChunk(
+            chunk_key=f"request:{req.id}", source="requests",
+            title=f"Req {req.id}", text=text,
+            metadata={"requestId": req.id, "status": req.status},
+        ))
 
     today = timezone.now().date()
-    for b in BorrowedItem.objects.select_related("item").order_by("-borrow_date")[:120]:
-        item_name = b.item.name if b.item else "Unknown item"
+    for b in BorrowedItem.objects.select_related("item").order_by("-borrow_date")[:60]:
+        item_name = b.item.name if b.item else "?"
         overdue_days = max(0, (today - b.expected_return_date).days) if b.expected_return_date else 0
-        overdue_label = f"{overdue_days}d overdue" if overdue_days > 0 and b.status == "Active" else "on time"
-        text = (
-            f"Borrow record {b.id}: {item_name} borrowed by {b.borrowed_by}, status {b.status}, "
-            f"borrow date {b.borrow_date}, expected return {b.expected_return_date}, {overdue_label}."
-        )
-        chunks.append(
-            RawChunk(
-                chunk_key=f"borrowed:{b.id}",
-                source="borrowed",
-                title=f"Borrow {b.id}",
-                text=text,
-                metadata={"borrowId": b.id, "status": b.status},
-            )
-        )
+        tag = f"{overdue_days}d late" if overdue_days > 0 and b.status == "Active" else b.status
+        text = f"Borrow {b.id}: {item_name} by {b.borrowed_by}, {tag}, return {b.expected_return_date}."
+        chunks.append(RawChunk(
+            chunk_key=f"borrowed:{b.id}", source="borrowed",
+            title=f"Borrow {b.id}", text=text,
+            metadata={"borrowId": b.id, "status": b.status},
+        ))
 
-    for alert in Alert.objects.select_related("item", "supplier", "risk_score").order_by("-created_at")[:120]:
+    for alert in Alert.objects.select_related("item", "supplier", "risk_score").order_by("-created_at")[:40]:
         target = alert.item.name if alert.item else (alert.supplier.name if alert.supplier else "N/A")
         score = alert.risk_score.score if alert.risk_score else None
-        score_txt = f"{round(score * 100)}%" if score is not None else "N/A"
-        text = (
-            f"Alert {alert.title} for {target}. Severity {alert.severity}, status {alert.status}, "
-            f"type {alert.alert_type}, risk score {score_txt}. Message: {alert.message}"
-        )
-        chunks.append(
-            RawChunk(
-                chunk_key=f"alert:{alert.id}",
-                source="alerts",
-                title=alert.title,
-                text=text,
-                metadata={"alertId": alert.id, "severity": alert.severity, "status": alert.status},
-            )
-        )
+        score_txt = f"{round(score * 100)}%" if score is not None else "?"
+        text = f"Alert: {alert.title} for {target}. {alert.severity}/{alert.status}, risk {score_txt}."
+        chunks.append(RawChunk(
+            chunk_key=f"alert:{alert.id}", source="alerts",
+            title=alert.title, text=text,
+            metadata={"alertId": alert.id, "severity": alert.severity, "status": alert.status},
+        ))
 
-    for act in ActivityEntry.objects.order_by("-timestamp")[:120]:
-        text = f"Activity {act.type} by {act.user} at {act.timestamp}: {act.description}"
-        chunks.append(
-            RawChunk(
-                chunk_key=f"activity:{act.id}",
-                source="activity",
-                title=act.type,
-                text=text,
-                metadata={"activityId": act.id, "type": act.type},
-            )
-        )
+    for act in ActivityEntry.objects.order_by("-timestamp")[:40]:
+        text = f"{act.type} by {act.user} {act.timestamp}: {act.description[:100]}"
+        chunks.append(RawChunk(
+            chunk_key=f"activity:{act.id}", source="activity",
+            title=act.type, text=text,
+            metadata={"activityId": act.id, "type": act.type},
+        ))
 
     return chunks
 
@@ -294,7 +262,24 @@ def _lexical_scores(question: str, chunks: list[KnowledgeChunk]) -> dict[str, fl
     return scores
 
 
-def retrieve_relevant_chunks(question: str, limit: int = 8, auto_index: bool = True) -> list[RetrievedChunk]:
+def _get_query_embedding(question: str) -> list[float]:
+    """Get embedding for a query string, using cache to avoid duplicate OpenAI calls."""
+    cache_key = f"rag_qembed:{_text_hash(question)}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    emb_result = embed_texts([question])
+    if emb_result.get("fallback"):
+        return []
+    vecs = emb_result.get("embeddings", [])
+    vec = vecs[0] if vecs else []
+    if vec:
+        cache.set(cache_key, vec, QUERY_EMBED_CACHE_TTL)
+    return vec
+
+
+def retrieve_relevant_chunks(question: str, limit: int = 5, auto_index: bool = True) -> list[RetrievedChunk]:
     q = (question or "").strip()
     if not q:
         return []
@@ -308,16 +293,13 @@ def retrieve_relevant_chunks(question: str, limit: int = 8, auto_index: bool = T
 
     lexical = _lexical_scores(q, chunks)
 
-    # Semantic scores if embeddings are available.
+    # Semantic scores — embedding is cached to avoid repeat API calls.
     semantic: dict[str, float] = {}
-    emb_result = embed_texts([q])
-    if not emb_result.get("fallback"):
-        q_vecs = emb_result.get("embeddings", [])
-        q_vec = q_vecs[0] if q_vecs else []
-        if q_vec:
-            for c in chunks:
-                if isinstance(c.embedding, list) and c.embedding:
-                    semantic[c.chunk_key] = _cosine_similarity(q_vec, c.embedding)
+    q_vec = _get_query_embedding(q)
+    if q_vec:
+        for c in chunks:
+            if isinstance(c.embedding, list) and c.embedding:
+                semantic[c.chunk_key] = _cosine_similarity(q_vec, c.embedding)
 
     # Hybrid rank.
     ranked: list[tuple[KnowledgeChunk, float]] = []
@@ -332,7 +314,7 @@ def retrieve_relevant_chunks(question: str, limit: int = 8, auto_index: bool = T
 
     ranked.sort(key=lambda x: x[1], reverse=True)
     top = ranked[: max(1, limit)]
-    out = [
+    return [
         RetrievedChunk(
             chunk_id=c.chunk_key,
             source=c.source,
@@ -342,15 +324,14 @@ def retrieve_relevant_chunks(question: str, limit: int = 8, auto_index: bool = T
         )
         for c, score in top
     ]
-    return out
 
 
-def build_rag_context(question: str, limit: int = 8) -> tuple[str, list[RetrievedChunk]]:
+def build_rag_context(question: str, limit: int = 5) -> tuple[str, list[RetrievedChunk]]:
     chunks = retrieve_relevant_chunks(question=question, limit=limit, auto_index=True)
     if not chunks:
-        return "No directly relevant records were retrieved from the indexed knowledge base.", []
+        return "No relevant records found in knowledge base.", []
 
-    lines = ["### Retrieved Knowledge (ranked)"]
+    lines = []
     for c in chunks:
         lines.append(_format_chunk_line(c.chunk_id, c.source, c.title, c.text))
     return "\n".join(lines), chunks

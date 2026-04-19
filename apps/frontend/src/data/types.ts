@@ -87,7 +87,9 @@ export interface AIMeta {
   latencyMs?: number;
   retrieval?: Array<{ chunkId: string; source: string; title: string; score: number }>;
   fallback?: boolean;
+  cached?: boolean;
   error?: string;
+  message?: string;
 }
 
 export interface InsightRecord {

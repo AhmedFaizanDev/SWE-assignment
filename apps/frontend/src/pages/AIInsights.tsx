@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -96,7 +96,7 @@ function ChatMessage({ role, content }: { role: 'user' | 'assistant'; content: s
           <Bot className="h-4 w-4 text-primary" />
         </div>
       )}
-      <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+      <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
         {content}
       </div>
     </div>
@@ -107,6 +107,12 @@ export default function AIInsights() {
   const queryClient = useQueryClient();
   const [question, setQuestion] = useState('');
   const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const lastQuestionRef = useRef('');
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory]);
 
   const {
     data: insights = [],
@@ -157,10 +163,28 @@ export default function AIInsights() {
     onError: () => toast.error('Failed to generate insights'),
   });
 
+  const generateSuggestionsMutation = useMutation({
+    mutationFn: () => aiApi.generateSuggestions(),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['ai-suggestions'] });
+      const count = res.suggestions?.length || 0;
+      if (count > 0) {
+        toast.success(`Generated ${count} suggestion${count !== 1 ? 's' : ''}`);
+      } else {
+        toast.info('No suggestions generated — ensure you have active insights first.');
+      }
+    },
+    onError: () => toast.error('Failed to generate suggestions'),
+  });
+
   const queryMutation = useMutation({
     mutationFn: (q: string) => aiApi.query(q),
     onSuccess: (res: AIQueryResponse) => {
-      setChatHistory(prev => [...prev, { role: 'assistant', content: res.answer || 'No answer available.' }]);
+      const meta = (res as unknown as { meta?: { cached?: boolean; tokens?: number; costUsd?: number } }).meta;
+      let suffix = '';
+      if (meta?.cached) suffix = '\n\n_[cached response]_';
+      else if (meta?.tokens) suffix = `\n\n_[${meta.tokens} tokens, $${(meta.costUsd ?? 0).toFixed(4)}]_`;
+      setChatHistory(prev => [...prev, { role: 'assistant', content: (res.answer || 'No answer available.') + suffix }]);
     },
     onError: () => {
       setChatHistory(prev => [...prev, { role: 'assistant', content: 'Sorry, I could not process your question. Please check your API key configuration.' }]);
@@ -185,6 +209,8 @@ export default function AIInsights() {
   const handleSendQuestion = () => {
     const q = question.trim();
     if (!q) return;
+    if (q === lastQuestionRef.current && queryMutation.isPending) return;
+    lastQuestionRef.current = q;
     setChatHistory(prev => [...prev, { role: 'user', content: q }]);
     setQuestion('');
     queryMutation.mutate(q);
@@ -331,6 +357,7 @@ export default function AIInsights() {
                     <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground">Thinking...</div>
                   </div>
                 )}
+                <div ref={chatEndRef} />
               </div>
               <Separator className="mb-3" />
               <form onSubmit={(e) => { e.preventDefault(); handleSendQuestion(); }} className="flex gap-2">
@@ -341,7 +368,7 @@ export default function AIInsights() {
                   className="flex-1"
                   disabled={queryMutation.isPending}
                 />
-                <Button type="submit" size="icon" disabled={queryMutation.isPending || !question.trim()}>
+                <Button type="submit" size="icon" aria-label="Send" disabled={queryMutation.isPending || !question.trim()}>
                   <Send className="h-4 w-4" />
                 </Button>
               </form>
@@ -351,6 +378,18 @@ export default function AIInsights() {
 
         {/* Suggestions Tab */}
         <TabsContent value="suggestions" className="space-y-3">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => generateSuggestionsMutation.mutate()}
+              disabled={generateSuggestionsMutation.isPending}
+            >
+              {generateSuggestionsMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Generate Suggestions
+            </Button>
+          </div>
           {suggestionsError ? (
             <Card className="border-destructive/30">
               <CardContent className="py-8 text-center text-sm text-destructive">
@@ -364,7 +403,7 @@ export default function AIInsights() {
               <CardContent className="py-12 text-center">
                 <Zap className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
                 <p className="text-sm text-muted-foreground">No pending suggestions.</p>
-                <p className="text-xs text-muted-foreground mt-1">AI will generate actionable suggestions when insights require approval.</p>
+                <p className="text-xs text-muted-foreground mt-1">Click "Generate Suggestions" to create actionable recommendations from your insights.</p>
               </CardContent>
             </Card>
           ) : (

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useInventory } from '@/contexts/InventoryContext';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const statusStyles: Record<string, string> = {
   Pending: 'bg-muted text-muted-foreground',
@@ -23,12 +24,14 @@ const statusFilters = ['All', 'Pending', 'Approved', 'Rejected', 'Issued'] as co
 
 export default function Requests() {
   const { requests, inventory, addRequest, updateRequestStatus, isLoading, requestsError, inventoryError } = useInventory();
+  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ itemId: '', requestedQty: 1, requestedBy: '', notes: '' });
   const [filter, setFilter] = useState<string>('All');
 
   const selectedItem = inventory.find(i => i.id === form.itemId);
   const qtyWarning = selectedItem && form.requestedQty > selectedItem.quantity;
+  const hasInventoryItems = inventory.length > 0;
 
   const filtered = filter === 'All' ? requests : requests.filter(r => r.status === filter);
 
@@ -70,43 +73,53 @@ export default function Requests() {
     );
   }
 
-  if (requests.length === 0) {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Create and manage item requests and approvals.</p>
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Create and manage item requests and approvals.</p>
+
+      {requests.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
             <FileText className="h-8 w-8 text-muted-foreground/50" />
           </div>
           <h3 className="text-lg font-semibold mb-1">No requests yet</h3>
           <p className="text-sm text-muted-foreground mb-4">Submit a request to get equipment or consumables</p>
-          <Button onClick={() => setModalOpen(true)} className="gap-1.5"><Plus className="h-4 w-4" /> New Request</Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Create and manage item requests and approvals.</p>
-
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-2 flex-wrap">
-          {statusFilters.map(s => (
-            <Button key={s} variant={filter === s ? 'default' : 'outline'} size="sm" className="text-xs" onClick={() => setFilter(s)}>{s}</Button>
-          ))}
-        </div>
-        <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5">
-          <Plus className="h-4 w-4" /> New Request
-        </Button>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <FileText className="h-8 w-8 text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">No {filter.toLowerCase()} requests</p>
+          <Button onClick={() => setModalOpen(true)} className="gap-1.5" disabled={!hasInventoryItems}>
+            <Plus className="h-4 w-4" /> New Request
+          </Button>
+          {!hasInventoryItems && (
+            <p className="text-xs text-muted-foreground">
+              Add inventory first to enable requests.
+              {' '}
+              <button
+                type="button"
+                className="text-primary underline underline-offset-2"
+                onClick={() => navigate('/inventory')}
+              >
+                Go to Inventory
+              </button>
+            </p>
+          )}
         </div>
       ) : (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+            <div className="flex gap-2 flex-wrap">
+              {statusFilters.map(s => (
+                <Button key={s} variant={filter === s ? 'default' : 'outline'} size="sm" className="text-xs" onClick={() => setFilter(s)}>{s}</Button>
+              ))}
+            </div>
+            <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5" disabled={!hasInventoryItems}>
+              <Plus className="h-4 w-4" /> New Request
+            </Button>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <FileText className="h-8 w-8 text-muted-foreground/40 mb-3" />
+              <p className="text-sm text-muted-foreground">No {filter.toLowerCase()} requests</p>
+            </div>
+          ) : (
         <Card className="border-border/50">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -158,11 +171,23 @@ export default function Requests() {
             </div>
           </CardContent>
         </Card>
+          )}
+        </>
       )}
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>New Request</DialogTitle></DialogHeader>
+          {!hasInventoryItems ? (
+            <div className="py-2 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                You need at least one inventory item before creating a request.
+              </p>
+              <Button className="w-full" onClick={() => { setModalOpen(false); navigate('/inventory'); }}>
+                Add Inventory Item
+              </Button>
+            </div>
+          ) : (
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label>Item <span className="text-destructive">*</span></Label>
@@ -191,9 +216,10 @@ export default function Requests() {
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
           </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd}>Submit Request</Button>
+            <Button onClick={handleAdd} disabled={!hasInventoryItems}>Submit Request</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

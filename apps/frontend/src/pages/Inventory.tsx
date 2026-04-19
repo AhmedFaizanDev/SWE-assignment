@@ -114,10 +114,13 @@ export default function Inventory() {
     );
   }
 
-  if (inventory.length === 0 && !search) {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Manage stock levels, locations, and reorder thresholds.</p>
+  const emptyNoSearch = inventory.length === 0 && !search;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Manage stock levels, locations, and reorder thresholds.</p>
+
+      {emptyNoSearch ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
             <Package className="h-8 w-8 text-muted-foreground/50" />
@@ -126,31 +129,25 @@ export default function Inventory() {
           <p className="text-sm text-muted-foreground mb-4">Add your first item to get started</p>
           <Button onClick={openAdd} className="gap-1.5"><Plus className="h-4 w-4" /> Add Item</Button>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Manage stock levels, locations, and reorder thresholds.</p>
-
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search items..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); if (!e.target.value) setSearchParams({}); }} className="pl-9 h-9 bg-muted/50 border-0" />
-        </div>
-        <Button onClick={openAdd} size="sm" className="gap-1.5">
-          <Plus className="h-4 w-4" /> Add Item
-        </Button>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Search className="h-8 w-8 text-muted-foreground/40 mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">No items match your search</p>
-          <Button variant="ghost" size="sm" className="mt-2" onClick={() => { setSearch(''); setSearchParams({}); }}>Clear search</Button>
-        </div>
       ) : (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search items..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); if (!e.target.value) setSearchParams({}); }} className="pl-9 h-9 bg-muted/50 border-0" />
+            </div>
+            <Button onClick={openAdd} size="sm" className="gap-1.5">
+              <Plus className="h-4 w-4" /> Add Item
+            </Button>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Search className="h-8 w-8 text-muted-foreground/40 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No items match your search</p>
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => { setSearch(''); setSearchParams({}); }}>Clear search</Button>
+            </div>
+          ) : (
         <Card className="border-border/50">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -205,6 +202,8 @@ export default function Inventory() {
             )}
           </CardContent>
         </Card>
+          )}
+        </>
       )}
 
       {/* Add/Edit Modal */}

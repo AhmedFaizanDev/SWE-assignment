@@ -1,107 +1,89 @@
 """
 Prompt templates for AI interactions.
 Templates use {variable} placeholders filled at runtime by context_builder.
+
+Token-cost strategy:
+- System prompt is shared across calls → keep it minimal.
+- User prompts include only essential data; schemas use shorthand.
+- max_tokens are tuned per endpoint to cap completion cost.
 """
 
-SYSTEM_INVENTORY_ANALYST = """You are an expert inventory management analyst for an engineering lab.
-You analyze inventory data, identify risks, and provide actionable recommendations.
-Always respond in valid JSON matching the requested schema.
-Base your analysis only on the provided data — never fabricate numbers.
-When uncertain, state your confidence level explicitly."""
+SYSTEM_INVENTORY_ANALYST = (
+    "You are an inventory analyst for an engineering lab. "
+    "Reply ONLY with valid JSON matching the requested schema. "
+    "Use only provided data — never invent numbers. "
+    "State confidence explicitly when uncertain."
+)
 
-USER_QUERY_TEMPLATE = """## Retrieved Context (RAG)
+USER_QUERY_TEMPLATE = """Context:
 {context}
 
-## User Question
-{question}
+Q: {question}
 
-Respond as JSON:
-{{
-  "answer": "your detailed answer",
-  "confidence": 0.0-1.0,
-  "citations": ["R1", "R2"],
-  "relatedItems": ["item names if relevant"],
-  "suggestedActions": ["action 1", "action 2"]
-}}
+JSON schema:
+{{"answer":"str","confidence":0-1,"citations":["chunk_id"],"relatedItems":["name"],"suggestedActions":["action"]}}
+Cite chunk ids (e.g. inventory:3). Lower confidence if evidence is weak."""
 
-Rules:
-- Ground your answer in retrieved context chunks and cite chunk ids used (e.g., R3).
-- If evidence is weak, say so and lower confidence.
-- Do not fabricate inventory values or IDs."""
-
-USER_INSIGHTS_TEMPLATE = """## Current Inventory Snapshot
+USER_INSIGHTS_TEMPLATE = """Inventory:
 {inventory_summary}
 
-## Recent Activity (last 30 days)
+Activity (30d):
 {activity_summary}
 
-## Supplier Information
+Suppliers:
 {supplier_summary}
 
-## Borrowed Equipment Status
+Borrowed:
 {borrowed_summary}
 
-Analyze the data and generate up to 5 actionable insights.
-Respond as JSON array:
-[
-  {{
-    "title": "concise title",
-    "description": "detailed analysis",
-    "category": "stockout_risk|overstock|demand_trend|supplier_risk|cost_optimization|operational",
-    "severity": "info|warning|critical",
-    "confidence": 0.0-1.0,
-    "impactEstimate": "business impact description",
-    "recommendedAction": "specific action to take",
-    "relatedItemIds": [],
-    "relatedSupplierIds": []
-  }}
-]"""
+Return JSON: {{"insights":[{{"title":"str","description":"str","category":"stockout_risk|overstock|demand_trend|supplier_risk|cost_optimization|operational","severity":"info|warning|critical","confidence":0-1,"impactEstimate":"str","recommendedAction":"str","relatedItemIds":[],"relatedSupplierIds":[]}}]}}
+Generate up to 5 actionable insights. Be concise."""
 
-USER_SIMULATION_TEMPLATE = """## Item Details
-{item_details}
+USER_SIMULATION_TEMPLATE = """Item: {item_details}
+Demand (90d): {demand_history}
+Stock: {current_quantity} (min {min_threshold}), ${unit_price}/unit
+Supplier: {supplier_info}
 
-## Historical Demand (last 90 days)
-{demand_history}
+JSON: {{"recommendedOrderQty":int,"estimatedCost":float,"reasoning":"str","daysUntilStockout":int|null,"optimalReorderPoint":int,"safetyStock":int,"confidence":0-1}}"""
 
-## Current Stock
-Quantity: {current_quantity}
-Min Threshold: {min_threshold}
-Unit Price: ${unit_price}
+USER_SUGGESTIONS_TEMPLATE = """Based on these insights, generate actionable suggestions that require human approval.
 
-## Supplier Info
-{supplier_info}
+Insights:
+{insights_summary}
 
-Simulate a reorder scenario. Respond as JSON:
-{{
-  "recommendedOrderQty": number,
-  "estimatedCost": number,
-  "reasoning": "why this quantity",
-  "daysUntilStockout": number or null,
-  "optimalReorderPoint": number,
-  "safetyStock": number,
-  "confidence": 0.0-1.0
-}}"""
+Inventory snapshot:
+{inventory_summary}
+
+JSON: {{"suggestions":[{{"suggestion_type":"reorder|rebalance|decommission","title":"str","description":"str","details":{{"itemIds":[],"reason":"str","estimatedSavings":"str"}}}}]}}
+Generate 1-3 suggestions. Only suggest actions with clear justification."""
 
 TEMPLATES = {
     'query': {
         'system': SYSTEM_INVENTORY_ANALYST,
         'user': USER_QUERY_TEMPLATE,
         'model': 'gpt-4o-mini',
-        'max_tokens': 1024,
+        'max_tokens': 512,
         'temperature': 0.3,
     },
     'insights': {
         'system': SYSTEM_INVENTORY_ANALYST,
         'user': USER_INSIGHTS_TEMPLATE,
         'model': 'gpt-4o-mini',
-        'max_tokens': 2048,
+        'max_tokens': 1024,
         'temperature': 0.4,
     },
     'simulation': {
         'system': SYSTEM_INVENTORY_ANALYST,
         'user': USER_SIMULATION_TEMPLATE,
         'model': 'gpt-4o-mini',
-        'max_tokens': 1024,
+        'max_tokens': 384,
         'temperature': 0.2,
+    },
+    'suggestions': {
+        'system': SYSTEM_INVENTORY_ANALYST,
+        'user': USER_SUGGESTIONS_TEMPLATE,
+        'model': 'gpt-4o-mini',
+        'max_tokens': 512,
+        'temperature': 0.3,
     },
 }

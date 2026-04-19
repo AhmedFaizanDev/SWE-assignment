@@ -68,11 +68,11 @@ export default function Suppliers() {
     );
   }
 
-  // Empty state
-  if (suppliers.length === 0) {
-    return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">Manage suppliers and their contact details.</p>
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Manage suppliers and their contact details.</p>
+
+      {suppliers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
             <Truck className="h-8 w-8 text-muted-foreground/50" />
@@ -81,21 +81,15 @@ export default function Suppliers() {
           <p className="text-sm text-muted-foreground mb-4">Add your first supplier to link them to inventory items</p>
           <Button onClick={openAdd} className="gap-1.5"><Plus className="h-4 w-4" /> Add Supplier</Button>
         </div>
-      </div>
-    );
-  }
+      ) : (
+        <>
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">{suppliers.length} suppliers</p>
+            <Button onClick={openAdd} size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> Add Supplier</Button>
+          </div>
 
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Manage suppliers and their contact details.</p>
-
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">{suppliers.length} suppliers</p>
-        <Button onClick={openAdd} size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> Add Supplier</Button>
-      </div>
-
-      <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {suppliers.map(s => (
           <motion.div key={s.id} variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
             <Card className="border-border/50 hover:shadow-md transition-all duration-300 cursor-pointer group" onClick={() => setViewSupplier(s)}>
@@ -127,7 +121,9 @@ export default function Suppliers() {
             </Card>
           </motion.div>
         ))}
-      </motion.div>
+          </motion.div>
+        </>
+      )}
 
       {/* Detail Sheet */}
       <Sheet open={!!viewSupplier} onOpenChange={() => setViewSupplier(null)}>

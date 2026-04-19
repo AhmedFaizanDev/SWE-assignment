@@ -126,7 +126,7 @@ def inventory_detail(request, pk):
             item.delete()
         except models.ProtectedError:
             return Response(
-                {'detail': 'Cannot delete: this item has active requests or borrowed records.'},
+                {'detail': 'Cannot delete: this item has related request or borrow history.'},
                 status=status.HTTP_409_CONFLICT,
             )
         _invalidate_inventory_cache()

@@ -8,8 +8,7 @@
     "build": "cd apps/frontend && npx vite build",
     "preview": "cd apps/frontend && npx vite preview",
     "lint": "cd apps/frontend && npx eslint .",
-    "test": "cd apps/frontend && npx vitest run",
-    "test:e2e": "cd apps/frontend && npx playwright test"
+    "test": "cd apps/frontend && npx vitest run"
   },
   "workspaces": [
     "apps/frontend"

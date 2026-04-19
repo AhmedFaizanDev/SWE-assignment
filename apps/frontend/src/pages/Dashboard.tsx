@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Package, AlertTriangle, BookOpen, FileText, ArrowUpRight, ArrowDownRight, RotateCcw, CheckCircle, XCircle, Clock, Inbox } from 'lucide-react';
+import { Package, AlertTriangle, BookOpen, FileText, ArrowUpRight, ArrowDownRight, RotateCcw, CheckCircle, XCircle, Clock, Inbox, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ const activityIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Dashboard() {
-  const { inventory, requests, borrowedItems, activities, isLoading, inventoryError, requestsError, borrowedError } = useInventory();
+  const { inventory, requests, borrowedItems, suppliers, activities, isLoading, inventoryError, requestsError, borrowedError } = useInventory();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -64,6 +64,7 @@ export default function Dashboard() {
   const lowStockItems = inventory.filter(i => i.quantity <= i.minThreshold);
   const activeBorrowed = borrowedItems.filter(b => b.status === 'Active' || b.status === 'Overdue');
   const pendingRequests = requests.filter(r => r.status === 'Pending');
+  const isFirstRun = inventory.length === 0 && suppliers.length === 0 && requests.length === 0 && borrowedItems.length === 0;
 
   const categoryData = ['Electronics', 'Mechanical', 'Tools', 'Consumables'].map(cat => ({
     category: cat,
@@ -113,6 +114,29 @@ export default function Dashboard() {
           </motion.div>
         ))}
       </motion.div>
+
+      {isFirstRun && (
+        <Card className="border-primary/25 bg-primary/[0.03]">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Quick Start
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your workspace is empty. Start by adding inventory and suppliers, then create requests.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button size="sm" onClick={() => navigate('/inventory')}>Add Inventory</Button>
+                <Button size="sm" variant="outline" onClick={() => navigate('/suppliers')}>Add Supplier</Button>
+                <Button size="sm" variant="outline" onClick={() => navigate('/requests')}>Create Request</Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Chart */}
@@ -193,7 +217,14 @@ export default function Dashboard() {
             )}
           </CardHeader>
           <CardContent>
-            {lowStockItems.length === 0 ? (
+            {inventory.length === 0 ? (
+              <div className="py-4 text-center space-y-2">
+                <p className="text-sm text-muted-foreground">No inventory yet.</p>
+                <Button variant="outline" size="sm" onClick={() => navigate('/inventory')}>
+                  Add your first item
+                </Button>
+              </div>
+            ) : lowStockItems.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">All items are above threshold ✓</p>
             ) : (
               <div className="overflow-x-auto">
