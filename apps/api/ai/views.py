@@ -1,8 +1,6 @@
 import json
-import hashlib
 import logging
 
-from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, throttle_classes
@@ -22,8 +20,6 @@ from .rag import build_rag_context
 
 logger = logging.getLogger(__name__)
 
-QUERY_CACHE_TTL = 120  # 2 min cache for identical questions
-
 
 class AIWriteThrottle(AnonRateThrottle):
     scope = 'ai_write'
@@ -36,10 +32,6 @@ class AIInsightsListThrottle(AnonRateThrottle):
         self.scope = 'ai_insights_read' if request.method == 'GET' else 'ai_write'
         self.rate = None
         return super().allow_request(request, view)
-
-
-def _query_cache_key(question: str) -> str:
-    return f"ai_query:{hashlib.sha256(question.lower().strip().encode()).hexdigest()[:16]}"
 
 
 def _to_text_answer(raw_answer):
@@ -82,17 +74,10 @@ def _to_text_answer(raw_answer):
 @api_view(['POST'])
 @throttle_classes([AIWriteThrottle])
 def ai_query(request):
-    """Natural-language Q&A grounded in live inventory data.
-    Identical questions are cached for 2 minutes to save tokens."""
+    """Natural-language Q&A grounded in live inventory data."""
     question = request.data.get('question', '').strip()
     if not question:
         return Response({'detail': 'question is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-    cache_key = _query_cache_key(question)
-    cached_response = cache.get(cache_key)
-    if cached_response is not None:
-        cached_response['meta']['cached'] = True
-        return Response(cached_response)
 
     rag_context, retrieved_chunks = build_rag_context(question=question, limit=5)
     context = rag_context if retrieved_chunks else build_full_context()
@@ -166,7 +151,6 @@ def ai_query(request):
             'tokens': result.get('tokens', 0),
             'costUsd': result.get('cost_usd', 0),
             'latencyMs': result.get('latency_ms', 0),
-            'cached': False,
             'retrieval': [
                 {
                     'chunkId': c.chunk_id,
@@ -179,7 +163,6 @@ def ai_query(request):
         },
     }
 
-    cache.set(cache_key, response_data, QUERY_CACHE_TTL)
     return Response(response_data)
 
 

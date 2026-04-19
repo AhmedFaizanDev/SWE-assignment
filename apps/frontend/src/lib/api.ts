@@ -229,8 +229,14 @@ export const analyticsApi = {
 // Alerts
 export const alertsApi = {
   list: (params?: { status?: string; severity?: string; type?: string }) => {
-    const search = params ? new URLSearchParams(params as Record<string, string>).toString() : '';
-    return request<Array<import('@/data/types').AlertRecord>>(`/alerts/${search ? `?${search}` : ''}`);
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.severity) q.set('severity', params.severity);
+    if (params?.type) q.set('type', params.type);
+    const search = q.toString();
+    return request<Array<import('@/data/types').AlertRecord>>(
+      search ? `/alerts/?${search}` : '/alerts/'
+    );
   },
   action: (id: string, status: string) =>
     request<import('@/data/types').AlertRecord>(`/alerts/${id}/`, {

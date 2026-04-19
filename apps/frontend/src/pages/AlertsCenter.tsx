@@ -5,12 +5,12 @@ import {
   Bell, AlertTriangle, ShieldAlert, Package, Truck, CheckCircle, XCircle,
   RefreshCw, Filter, Eye,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { alertsApi } from '@/lib/api';
+import { alertsApi, ApiError } from '@/lib/api';
 import type { AlertRecord } from '@/data/types';
 
 const DETAIL_LABELS: Record<string, string> = {
@@ -133,7 +133,10 @@ export default function AlertsCenter() {
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
       toast.success(`Computed ${res.riskScores} risk scores, generated ${res.alertsGenerated} alerts`);
     },
-    onError: () => toast.error('Failed to compute risks'),
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Failed to compute risks';
+      toast.error(msg);
+    },
   });
 
   const actionMutation = useMutation({
@@ -141,6 +144,10 @@ export default function AlertsCenter() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
       toast.success('Alert updated');
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Could not update alert';
+      toast.error(msg);
     },
   });
 
@@ -277,7 +284,8 @@ export default function AlertsCenter() {
                               <h4 className="text-sm font-semibold">{alert.title}</h4>
                               <Badge variant={cfg.badge} className="text-[10px]">{alert.severity}</Badge>
                               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                {typeIcons[alert.alertType]} {alert.alertType.replace('_', ' ')}
+                                {typeIcons[alert.alertType] ?? <Package className="h-3.5 w-3.5" />}{' '}
+                                {alert.alertType.replace(/_/g, ' ')}
                               </div>
                               {alert.riskScore !== null && (
                                 <Badge variant="outline" className="text-[10px]">{Math.round(alert.riskScore * 100)}% risk</Badge>
@@ -287,29 +295,48 @@ export default function AlertsCenter() {
                               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{bodyText}</p>
                             )}
                             {showDetails && <AlertDetails details={detailObj} />}
-                            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[10px] text-muted-foreground">
+                              {alert.status !== 'active' && (
+                                <Badge variant="outline" className="text-[9px] font-normal capitalize">
+                                  {alert.status}
+                                </Badge>
+                              )}
                               {alert.itemName && <span>Item: {alert.itemName}</span>}
                               {alert.supplierName && <span>Supplier: {alert.supplierName}</span>}
                               <span>{new Date(alert.createdAt).toLocaleString()}</span>
+                              {alert.resolvedAt && (
+                                <span>Resolved: {new Date(alert.resolvedAt).toLocaleString()}</span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        {alert.status === 'active' && (
+                        {(alert.status === 'active' || alert.status === 'acknowledged') && (
                           <div className="flex gap-1 shrink-0">
+                            {alert.status === 'active' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                disabled={actionMutation.isPending}
+                                onClick={() => actionMutation.mutate({ id: alert.id, status: 'acknowledged' })}
+                              >
+                                <Eye className="h-3 w-3" /> Ack
+                              </Button>
+                            )}
                             <Button
-                              variant="ghost" size="sm" className="h-7 text-xs gap-1"
-                              onClick={() => actionMutation.mutate({ id: alert.id, status: 'acknowledged' })}
-                            >
-                              <Eye className="h-3 w-3" /> Ack
-                            </Button>
-                            <Button
-                              variant="ghost" size="sm" className="h-7 text-xs gap-1"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              disabled={actionMutation.isPending}
                               onClick={() => actionMutation.mutate({ id: alert.id, status: 'resolved' })}
                             >
                               <CheckCircle className="h-3 w-3" /> Resolve
                             </Button>
                             <Button
-                              variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1 text-muted-foreground"
+                              disabled={actionMutation.isPending}
                               onClick={() => actionMutation.mutate({ id: alert.id, status: 'dismissed' })}
                             >
                               <XCircle className="h-3 w-3" /> Dismiss

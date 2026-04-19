@@ -14,6 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { aiApi, analyticsApi, ApiError } from '@/lib/api';
+import { useAIChatSession } from '@/contexts/AIChatSessionContext';
+import type { InsightRecord, AIQueryResponse, KPISnapshot, AISuggestion } from '@/data/types';
 
 const aiPageQueryOpts = {
   staleTime: 60_000,
@@ -23,7 +25,6 @@ const aiPageQueryOpts = {
     return failureCount < 1;
   },
 };
-import type { InsightRecord, AIQueryResponse, KPISnapshot, AISuggestion } from '@/data/types';
 
 const categoryIcons: Record<string, React.ReactNode> = {
   stockout_risk: <AlertTriangle className="h-4 w-4 text-destructive" />,
@@ -106,7 +107,7 @@ function ChatMessage({ role, content }: { role: 'user' | 'assistant'; content: s
 export default function AIInsights() {
   const queryClient = useQueryClient();
   const [question, setQuestion] = useState('');
-  const [chatHistory, setChatHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const { chatHistory, pushUserMessage, pushAssistantMessage, clearChat } = useAIChatSession();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const lastQuestionRef = useRef('');
 
@@ -184,10 +185,10 @@ export default function AIInsights() {
       let suffix = '';
       if (meta?.cached) suffix = '\n\n_[cached response]_';
       else if (meta?.tokens) suffix = `\n\n_[${meta.tokens} tokens, $${(meta.costUsd ?? 0).toFixed(4)}]_`;
-      setChatHistory(prev => [...prev, { role: 'assistant', content: (res.answer || 'No answer available.') + suffix }]);
+      pushAssistantMessage((res.answer || 'No answer available.') + suffix);
     },
     onError: () => {
-      setChatHistory(prev => [...prev, { role: 'assistant', content: 'Sorry, I could not process your question. Please check your API key configuration.' }]);
+      pushAssistantMessage('Sorry, I could not process your question. Please check your API key configuration.');
     },
   });
 
@@ -211,7 +212,7 @@ export default function AIInsights() {
     if (!q) return;
     if (q === lastQuestionRef.current && queryMutation.isPending) return;
     lastQuestionRef.current = q;
-    setChatHistory(prev => [...prev, { role: 'user', content: q }]);
+    pushUserMessage(q);
     setQuestion('');
     queryMutation.mutate(q);
   };
@@ -333,10 +334,21 @@ export default function AIInsights() {
         <TabsContent value="chat">
           <Card className="border-border/50">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" /> Inventory AI Assistant
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">Ask questions about your inventory, suppliers, trends, or get recommendations.</p>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Bot className="h-4 w-4 text-primary" /> Inventory AI Assistant
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ask questions about your inventory, suppliers, trends, or get recommendations. Conversation is kept until you leave the app or refresh the page.
+                  </p>
+                </div>
+                {chatHistory.length > 0 && (
+                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs shrink-0" onClick={() => clearChat()}>
+                    Clear chat
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="min-h-[300px] max-h-[400px] overflow-y-auto space-y-3 mb-4 p-2">
@@ -346,8 +358,8 @@ export default function AIInsights() {
                     <p className="text-xs text-muted-foreground">Try: "Which items are at risk of stockout?" or "How are our suppliers performing?"</p>
                   </div>
                 )}
-                {chatHistory.map((msg, i) => (
-                  <ChatMessage key={i} role={msg.role} content={msg.content} />
+                {chatHistory.map((msg) => (
+                  <ChatMessage key={msg.id} role={msg.role} content={msg.content} />
                 ))}
                 {queryMutation.isPending && (
                   <div className="flex gap-3">
